@@ -47,7 +47,7 @@ jobs:
       run: |
         python -m pip install -e . pytest --progress-bar off
         ! python -c "import numpy"
-        test -z "$(find vunit/python_bridge vunit/vhdl/python -name '*.so' -o -name '*.dll')"
+        test -z "$(find vunit/python_bridge vunit/vhdl/python_bridge -name '*.so' -o -name '*.dll')"
 
     - name: '🚧 Unit tests'
       run: python -m pytest -ra tests/unit
@@ -109,12 +109,12 @@ jobs:
         "$VENV/bin/python" -m pip install numpy -e . --progress-bar off
 
     - name: '🚧 Feature tests'
-      run: '"$VENV/bin/python" vunit/vhdl/python/run.py -p 4 -o "$OUT"'
+      run: '"$VENV/bin/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$OUT"'
 
     - name: '🚧 Feature tests with cached bridge'
       run: |
         before="$(ls -l --time-style=full-iso "$OUT"/python_bridge/*/libvunit_python_bridge.so)"
-        "$VENV/bin/python" vunit/vhdl/python/run.py -p 4 -o "$OUT"
+        "$VENV/bin/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$OUT"
         test "$before" = "$(ls -l --time-style=full-iso "$OUT"/python_bridge/*/libvunit_python_bridge.so)"
 
     - name: '🚧 Example'
@@ -182,7 +182,7 @@ jobs:
     - name: '🚧 Feature tests (no compiler on PATH)'
       run: |
         ! command -v cl
-        "$VENV/Scripts/python" vunit/vhdl/python/run.py -p 4 -o "$OUT"
+        "$VENV/Scripts/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$OUT"
 
     - name: '🚧 Example'
       run: '"$VENV/Scripts/python" examples/vhdl/python/run.py -p 4'
@@ -222,7 +222,7 @@ jobs:
       run: |
         tar tzf dist/*.tar.gz > content.txt
         for file in python_bridge/bridge.py python_bridge/runtime.py python_bridge/native/vunit_python_bridge.c \
-                    vhdl/python/src/python_ffi_pkg.vhd.in vhdl/python/src/python_pkg.vhd; do
+                    vhdl/python_bridge/src/python_ffi_pkg.vhd.in vhdl/python_bridge/src/python_pkg.vhd; do
           grep -q "vunit/$file\$" content.txt || { echo "missing $file"; exit 1; }
         done
         test "$(grep -c 'vunit/python_bridge/bin/vunit_python_bridge-cp3[0-9]*-win_amd64.dll$' content.txt)" = 5
