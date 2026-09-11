@@ -17,15 +17,25 @@ time. That way the simulator does not need the Python installation on PATH.
 """
 
 import argparse
+import importlib.util
 import subprocess
 import sys
 import sysconfig
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(ROOT))
 
-from vunit.python_bridge import BRIDGE_SOURCE, BINARY_PATH, windows_dll_name  # pylint: disable=wrong-import-position
+def _load_python_bridge():
+    """
+    Load vunit/python_bridge by path, without importing vunit and its dependencies.
+    """
+    path = Path(__file__).parent.parent / "vunit" / "python_bridge" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("_vunit_python_bridge_setup", path)
+    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    return module
+
+
+PYTHON_BRIDGE = _load_python_bridge()
 
 
 def main():
@@ -34,7 +44,10 @@ def main():
     """
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument(
-        "--output-dir", type=Path, default=BINARY_PATH, help="Directory to write the DLL to (default: %(default)s)"
+        "--output-dir",
+        type=Path,
+        default=PYTHON_BRIDGE.BINARY_PATH,
+        help="Directory to write the DLL to (default: %(default)s)",
     )
     args = parser.parse_args()
 
@@ -50,7 +63,7 @@ def main():
         raise SystemExit(f"Missing import library {libs_dir / (python_lib + '.lib')}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    output = args.output_dir / windows_dll_name()
+    output = args.output_dir / PYTHON_BRIDGE.windows_dll_name()
     build_dir = args.output_dir / "build"
     build_dir.mkdir(exist_ok=True)
 
@@ -64,7 +77,7 @@ def main():
         "/Brepro",
         f"/I{include_dir}",
         f"/Fo{build_dir}\\",
-        str(BRIDGE_SOURCE),
+        str(PYTHON_BRIDGE.BRIDGE_SOURCE),
         f"/Fe{output}",
         "/link",
         "/Brepro",

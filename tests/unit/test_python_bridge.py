@@ -626,7 +626,7 @@ class TestSimulatorIntegration(unittest.TestCase):
             finally:
                 python_bridge._BRIDGES.pop(simif._project, None)  # pylint: disable=protected-access
 
-            flag = "-Wl,-L/bridge/dir"
+            flag = f"-Wl,-L{Path('/bridge/dir')!s}"
             if expect_flag:
                 self.assertIn(flag, cmd, f"backend={backend}")
             else:
@@ -673,8 +673,9 @@ class TestSimulatorIntegration(unittest.TestCase):
 
             cmd = captured["cmd"]
             self.assertIn("-r", cmd)
-            self.assertIn("--load=/bridge/dir/libvunit_python_bridge.so", cmd)
-            self.assertGreater(cmd.index("--load=/bridge/dir/libvunit_python_bridge.so"), cmd.index("-r"))
+            load = f"--load={Path('/bridge/dir/libvunit_python_bridge.so')!s}"
+            self.assertIn(load, cmd)
+            self.assertGreater(cmd.index(load), cmd.index("-r"))
 
     def test_nvc_simulate_has_no_load_flag_without_bridge(self):
         from vunit.sim_if.nvc import NVCInterface  # pylint: disable=import-outside-toplevel
