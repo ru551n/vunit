@@ -1253,13 +1253,15 @@ other preprocessors. Lowest value first. The order between preprocessors with th
         """
         self._builtins.add_verilog_builtins()
 
-    def add_vhdl_builtins(self, external=None, use_external_log=None):
+    def add_vhdl_builtins(self, external=None, use_external_log=None, python=False):
         """
         Add VUnit VHDL builtin libraries.
 
         :param external: struct to provide bridges for the external VHDL API.
         :param use_external_log: path to external implementation of common_log_pkg-body to allow
             VUnit log messages to be redirected to another logging framework.
+        :param python: Add ``python_execute`` and ``python_call`` to ``vunit_context`` for calling
+            Python from VHDL. Requires VHDL-2008 or later and NVC or GHDL, see :ref:`vhdl_python`.
 
         :example:
 
@@ -1275,7 +1277,7 @@ other preprocessors. Lowest value first. The order between preprocessors with th
           VHDL users need to call this method explicitly in order to preserve the functionality.
           See :vunit_issue:`777`.
         """
-        self._builtins.add_vhdl_builtins(external=external, use_external_log=use_external_log)
+        self._builtins.add_vhdl_builtins(external=external, use_external_log=use_external_log, python=python)
 
     def add_package(self, package_name: str) -> None:
         """Add VUnit package."""

@@ -1,0 +1,250 @@
+name: 'python bridge'
+
+# Tests of the VHDL Python integration (add_vhdl_builtins(python=True)) on
+# Linux (bridge compiled locally) and Windows (prebuilt MSVC DLLs), plus checks
+# that normal VUnit development is unaffected when the feature is not used.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  PY_COLORS: 1
+
+jobs:
+
+#
+# Normal development: no compiler use, no bridge artifacts, no NumPy
+#
+
+  normal-dev:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    name: '🧪 Normal development · ${{ matrix.os }}'
+    defaults:
+      run:
+        shell: bash
+    steps:
+
+    - name: '🧰 Checkout'
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: '🐍 Setup Python'
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: '⚙️ Setup GHDL'
+      uses: ghdl/setup-ghdl@main
+      with:
+        version: nightly
+        backend: mcode
+
+    - name: '🐍 Install VUnit (editable) without bridge prerequisites'
+      run: |
+        python -m pip install -U pip --progress-bar off
+        python -m pip install -e . pytest --progress-bar off
+        ! python -c "import numpy" 2>/dev/null
+
+    - name: '🔍 No prebuilt bridge binaries in the repository'
+      run: |
+        test -z "$(find vunit/vhdl/python vunit/python_bridge -name '*.so' -o -name '*.dll' -o -name '*.pyd')"
+
+    - name: '🚧 Unit tests'
+      run: python -m pytest -ra tests/unit
+
+    - name: '🚧 Builtins without Python support'
+      env:
+        CC: /nonexistent/compiler
+        VUNIT_SIMULATOR: ghdl
+      run: |
+        python vunit/vhdl/string_ops/run.py -p 4 -o normal_out
+        test ! -e normal_out/python_bridge
+
+#
+# Linux: bridge compiled from source on first use
+#
+
+  linux:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { py: '3.10', sim: nvc }
+          - { py: '3.14', sim: nvc }
+          - { py: '3.10', sim: ghdl, backend: mcode }
+          - { py: '3.14', sim: ghdl, backend: mcode }
+          - { py: '3.14', sim: ghdl, backend: llvm }
+    name: '🐧 Linux · Python ${{ matrix.py }} · ${{ matrix.sim }} ${{ matrix.backend }}'
+    steps:
+
+    - name: '🧰 Checkout'
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: '🐍 Setup Python'
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.py }}
+
+    - name: '⚙️ Setup NVC'
+      if: matrix.sim == 'nvc'
+      run: |
+        curl -fsSL -o nvc.deb https://github.com/nickg/nvc/releases/download/r1.22.1/nvc_1.22.1-1_amd64_ubuntu-24.04.deb
+        sudo apt-get install -y ./nvc.deb
+        nvc --version
+
+    - name: '⚙️ Setup GHDL'
+      if: matrix.sim == 'ghdl'
+      uses: ghdl/setup-ghdl@main
+      with:
+        version: nightly
+        backend: ${{ matrix.backend }}
+
+    - name: '🐍 Create virtual environment with VUnit and NumPy'
+      run: |
+        python -m venv "$RUNNER_TEMP/venv with space"
+        "$RUNNER_TEMP/venv with space/bin/python" -m pip install -U pip numpy --progress-bar off
+        "$RUNNER_TEMP/venv with space/bin/python" -m pip install -e . --progress-bar off
+
+    - name: '🚧 Feature tests'
+      env:
+        VUNIT_SIMULATOR: ${{ matrix.sim }}
+      run: |
+        "$RUNNER_TEMP/venv with space/bin/python" vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
+
+    - name: '🚧 Feature tests again (cached bridge, no compilation)'
+      env:
+        VUNIT_SIMULATOR: ${{ matrix.sim }}
+        CC: /nonexistent/compiler
+      run: |
+        "$RUNNER_TEMP/venv with space/bin/python" vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
+
+    - name: '🚧 Example'
+      env:
+        VUNIT_SIMULATOR: ${{ matrix.sim }}
+      run: |
+        "$RUNNER_TEMP/venv with space/bin/python" examples/vhdl/python/run.py -p 4
+
+#
+# Windows: prebuilt MSVC DLLs, no compiler on the user side
+#
+
+  dlls:
+    uses: ./.github/workflows/python_bridge_dlls.yml
+
+  windows:
+    needs: dlls
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        py: ['3.10', '3.12', '3.14']
+        sim: [nvc, ghdl]
+    name: '🟦 Windows · Python ${{ matrix.py }} · ${{ matrix.sim }}'
+    defaults:
+      run:
+        shell: bash
+    steps:
+
+    - name: '🧰 Checkout'
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: '📥 Download bridge DLLs'
+      uses: actions/download-artifact@v4
+      with:
+        name: python-bridge-dlls
+        path: vunit/python_bridge/bin
+
+    - name: '🐍 Setup Python'
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.py }}
+        architecture: x64
+
+    - name: '⚙️ Setup NVC'
+      if: matrix.sim == 'nvc'
+      shell: pwsh
+      run: |
+        Invoke-WebRequest -Uri https://github.com/nickg/nvc/releases/download/r1.22.1/nvc-1.22.1.msi -OutFile nvc.msi
+        Start-Process msiexec.exe -Wait -ArgumentList '/i', 'nvc.msi', '/qn', '/norestart'
+        $bin = Get-ChildItem -Path 'C:\Program Files*' -Recurse -Filter nvc.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+        $bin.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        & $bin.FullName --version
+
+    - name: '⚙️ Setup GHDL'
+      if: matrix.sim == 'ghdl'
+      uses: ghdl/setup-ghdl@main
+      with:
+        version: nightly
+        backend: mcode
+
+    - name: '🐍 Create virtual environment with VUnit and NumPy'
+      run: |
+        python -m venv "$RUNNER_TEMP/venv with space"
+        "$RUNNER_TEMP/venv with space/Scripts/python" -m pip install -U pip numpy --progress-bar off
+        "$RUNNER_TEMP/venv with space/Scripts/python" -m pip install -e . --progress-bar off
+
+    - name: '🚧 Feature tests'
+      env:
+        VUNIT_SIMULATOR: ${{ matrix.sim }}
+      run: |
+        ! command -v cl
+        "$RUNNER_TEMP/venv with space/Scripts/python" vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
+
+    - name: '🚧 Example'
+      env:
+        VUNIT_SIMULATOR: ${{ matrix.sim }}
+      run: |
+        "$RUNNER_TEMP/venv with space/Scripts/python" examples/vhdl/python/run.py -p 4
+
+#
+# Packaging: sources shipped, no generic Linux binary, DLLs included when present
+#
+
+  packaging:
+    needs: dlls
+    runs-on: ubuntu-latest
+    name: '📦 Packaging'
+    steps:
+
+    - name: '🧰 Checkout'
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: '📥 Download bridge DLLs'
+      uses: actions/download-artifact@v4
+      with:
+        name: python-bridge-dlls
+        path: vunit/python_bridge/bin
+
+    - name: '🐍 Setup Python'
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: '📦 Build sdist'
+      run: |
+        pip install -U setuptools wheel --progress-bar off
+        python setup.py sdist
+
+    - name: '🔍 Check content'
+      run: |
+        tar tzf dist/*.tar.gz > content.txt
+        for file in python_bridge/__init__.py python_bridge/runtime.py python_bridge/native/vunit_python_bridge.c \
+                    vhdl/python/src/python_ffi_pkg.vhd.in vhdl/python/src/python_pkg.vhd vhdl/python/src/python_pkg-body.vhd; do
+          grep -q "vunit/$file\$" content.txt || { echo "missing $file"; exit 1; }
+        done
+        test "$(grep -c 'vunit/python_bridge/bin/vunit_python_bridge-cp3[0-9]*-win_amd64.dll$' content.txt)" = 5
+        ! grep -q '\.so$' content.txt
