@@ -74,7 +74,56 @@ def _encode(text):
     return text.encode(TEXT_ENCODING, TEXT_ERRORS)
 
 
-class Runtime:
+class KeywordArguments:
+    """
+    Keyword argument values created by kw() in VHDL, and those selected for the next call.
+
+    kw() transfers its value immediately (exactly, like a positional argument) and
+    VHDL only keeps an id. Staged values live until the simulation ends so that a
+    kw() constant can be used in several calls.
+    """
+
+    def __init__(self):
+        self._staged = {}  # id -> (name, value)
+        self._next = {}
+
+    def stage(self, name, value):
+        """
+        Stage a value and return its id.
+        """
+        if not name.isidentifier():
+            raise ValueError(f"kw: {name!r} is not a valid Python keyword argument name")
+        staged_id = len(self._staged) + 1
+        self._staged[staged_id] = (name, value)
+        return staged_id
+
+    def use(self, ids):
+        """
+        Select the staged values whose ids are listed (";" separated) for the next call.
+        """
+        numpy = sys.modules.get("numpy")
+        keywords = {}
+        for item in ids.split(";"):
+            if item == "":
+                continue
+            name, value = self._staged[int(item)]
+            if name in keywords:
+                raise TypeError(f"keyword argument {name!r} is given more than once")
+            if numpy is not None and isinstance(value, numpy.ndarray):
+                # The function may modify it in place, keep the staged value intact
+                value = value.copy()
+            keywords[name] = value
+        self._next = keywords
+
+    def take(self):
+        """
+        The keyword arguments for the call being made; the selection is reset.
+        """
+        keywords, self._next = self._next, {}
+        return keywords
+
+
+class Runtime:  # pylint: disable=too-many-instance-attributes
     """
     State of the embedded Python session: one persistent namespace shared by
     all python_execute and python_call operations of a simulation.
@@ -91,6 +140,7 @@ class Runtime:
         # Metadata of the integer_array_t arguments of the current call, keyed
         # by id() of the NumPy array created for them.
         self._array_meta = {}
+        self._keywords = KeywordArguments()
 
         self._check_environment(prefix)
 
@@ -145,6 +195,19 @@ class Runtime:
         if name not in self._sessions:
             self._sessions[name] = {"__name__": "__main__", "__builtins__": builtins}
         self._session = name
+        self._keywords.take()  # a new operation starts without keyword arguments
+
+    def stage_keyword(self, name, value):
+        """
+        Stage a keyword argument value created by kw() in VHDL and return its id.
+        """
+        return self._keywords.stage(name, value)
+
+    def use_keywords(self, ids):
+        """
+        Use staged keyword arguments in the next call.
+        """
+        self._keywords.use(ids)
 
     @property
     def _namespace(self):
@@ -316,9 +379,10 @@ class Runtime:
         """
         self._result = _NO_VALUE
         self._function_name = name
+        keywords = self._keywords.take()
         try:
             function = self._resolve_function(name)
-            self._result = function(*args)
+            self._result = function(*args, **keywords)
         except BaseException:
             self._array_meta.clear()
             raise

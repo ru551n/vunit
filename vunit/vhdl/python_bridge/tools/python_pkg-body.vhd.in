@@ -215,57 +215,57 @@ package body python_pkg is
       and succeeded(vpy_call, call_context(function_name, session));
   end;
 
-  impure function push_arg(function_name : string; arg : integer) return boolean is
+  impure function push_arg(operation : string; arg : integer) return boolean is
   begin
-    return succeeded(vpy_push_integer(arg), call_context(function_name));
+    return succeeded(vpy_push_integer(arg), operation);
   end;
 
-  impure function push_arg(function_name : string; arg : real) return boolean is
+  impure function push_arg(operation : string; arg : real) return boolean is
   begin
-    return succeeded(vpy_push_real(arg), call_context(function_name));
+    return succeeded(vpy_push_real(arg), operation);
   end;
 
-  impure function push_arg(function_name : string; arg : boolean) return boolean is
+  impure function push_arg(operation : string; arg : boolean) return boolean is
   begin
-    return succeeded(vpy_push_boolean(boolean'pos(arg)), call_context(function_name));
+    return succeeded(vpy_push_boolean(boolean'pos(arg)), operation);
   end;
 
-  impure function push_arg(function_name : string; arg : string) return boolean is
+  impure function push_arg(operation : string; arg : string) return boolean is
   begin
-    return succeeded(send_string(arg), call_context(function_name))
-      and succeeded(vpy_push_string, call_context(function_name));
+    return succeeded(send_string(arg), operation)
+      and succeeded(vpy_push_string, operation);
   end;
 
-  impure function push_arg(function_name : string; arg : std_ulogic) return boolean is
+  impure function push_arg(operation : string; arg : std_ulogic) return boolean is
   begin
-    return push_arg(function_name, string'(1 => to_character(arg)));
+    return push_arg(operation, string'(1 => to_character(arg)));
   end;
 
-  impure function push_arg(function_name : string; arg : std_ulogic_vector) return boolean is
+  impure function push_arg(operation : string; arg : std_ulogic_vector) return boolean is
   begin
-    return push_arg(function_name, logic_image(arg));
+    return push_arg(operation, logic_image(arg));
   end;
 
-  impure function push_arg(function_name : string; arg : signed) return boolean is
+  impure function push_arg(operation : string; arg : signed) return boolean is
   begin
-    return succeeded(send_string(logic_image(std_ulogic_vector(arg))), call_context(function_name))
-      and succeeded(vpy_push_bits(1), call_context(function_name));
+    return succeeded(send_string(logic_image(std_ulogic_vector(arg))), operation)
+      and succeeded(vpy_push_bits(1), operation);
   end;
 
-  impure function push_arg(function_name : string; arg : unsigned) return boolean is
+  impure function push_arg(operation : string; arg : unsigned) return boolean is
   begin
-    return succeeded(send_string(logic_image(std_ulogic_vector(arg))), call_context(function_name))
-      and succeeded(vpy_push_bits(0), call_context(function_name));
+    return succeeded(send_string(logic_image(std_ulogic_vector(arg))), operation)
+      and succeeded(vpy_push_bits(0), operation);
   end;
 
-  impure function push_arg(function_name : string; arg : integer_array_t) return boolean is
+  impure function push_arg(operation : string; arg : integer_array_t) return boolean is
     constant length : natural := work.integer_array_pkg.length(arg);
     variable chunk : integer_chunk_t;
     variable offset, n : natural := 0;
   begin
     if not succeeded(
       vpy_push_array(length, width(arg), height(arg), depth(arg), bit_width(arg), boolean'pos(is_signed(arg))),
-      call_context(function_name)
+      operation
     ) then
       return false;
     end if;
@@ -275,7 +275,7 @@ package body python_pkg is
       for idx in 0 to n - 1 loop
         chunk(idx) := get(arg, offset + idx);
       end loop;
-      if not succeeded(vpy_array_write(chunk, n), call_context(function_name)) then
+      if not succeeded(vpy_array_write(chunk, n), operation) then
         return false;
       end if;
       offset := offset + n;
@@ -283,15 +283,44 @@ package body python_pkg is
     return true;
   end;
 
-  impure function push_arg(function_name : string; args : integer_array_vec_t) return boolean is
+  impure function push_arg(operation : string; args : integer_array_vec_t) return boolean is
   begin
     for idx in args'range loop
-      if not push_arg(function_name, args(idx)) then
+      if not push_arg(operation, args(idx)) then
         return false;
       end if;
     end loop;
     return true;
   end;
+
+  impure function push_kwargs(function_name : string; session : python_session_t; kwargs : python_kwargs_t)
+  return boolean is
+  begin
+    if kwargs'length = 0 then
+      return true;
+    end if;
+    return succeeded(send_string(string(kwargs)), call_context(function_name, session))
+      and succeeded(vpy_use_keywords, call_context(function_name, session));
+  end;
+
+  -----------------------------------------------------------------------------
+  -- kw
+  -----------------------------------------------------------------------------
+  function kw_context(name : string) return string is
+  begin
+    return "kw(""" & name & """)";
+  end;
+
+  -- Stage the pushed value as keyword argument name and return its reference
+  impure function stage_keyword(name : string) return python_kwargs_t is
+  begin
+    if succeeded(send_string(name), kw_context(name)) and succeeded(vpy_stage_keyword, kw_context(name)) then
+      return python_kwargs_t(integer'image(vpy_staged_keyword) & ";");
+    end if;
+    return "";
+  end;
+
+$keyword_functions
 
   impure function convert_result(
     function_name : string; session : python_session_t; kind : integer; width : integer := -1

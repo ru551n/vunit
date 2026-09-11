@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
  *
  * Data transferred from VHDL: a byte buffer for strings (source code, file
- * and function names, string arguments) and the positional arguments of the
- * next python_call.
+ * and function names, string arguments), the positional arguments of the
+ * next python_call and keyword argument values staged by kw().
  */
 
 #include "bridge.h"
@@ -29,6 +29,9 @@ static PyObject *g_pending = NULL; /* bytearray backing the array argument being
 static char *g_pending_data = NULL;
 static size_t g_pending_size = 0;
 static size_t g_pending_position = 0;
+
+/* Id of the keyword argument value staged last. */
+static int32_t g_staged_keyword = 0;
 
 /* New reference to the transfer buffer as a str. */
 PyObject *vpy_buffer_as_str(void) {
@@ -233,6 +236,75 @@ VPY_EXPORT int32_t vpy_push_array(int32_t length, int32_t width, int32_t height,
 
 done:
   Py_XDECREF(storage);
+  PyGILState_Release(gil);
+  return status;
+}
+
+/*
+ * Stage the last pushed argument as a keyword argument value named by the
+ * buffer. The runtime keeps it under an id, see vpy_staged_keyword.
+ */
+VPY_EXPORT int32_t vpy_stage_keyword(void) {
+  PyGILState_STATE gil;
+  Py_ssize_t count;
+  PyObject *name = NULL;
+  PyObject *value = NULL;
+  PyObject *id = NULL;
+  int status = VPY_ERROR;
+
+  if (vpy_enter(&gil) != VPY_OK) {
+    return VPY_ERROR;
+  }
+  count = g_args == NULL ? 0 : PyList_Size(g_args);
+  if (count < 1) {
+    vpy_set_error("Internal error: no keyword argument value pushed");
+    goto done;
+  }
+  value = PyList_GetItem(g_args, count - 1); /* borrowed */
+  Py_INCREF(value);
+  name = vpy_buffer_as_str();
+  if (name == NULL || PyList_SetSlice(g_args, count - 1, count, NULL) < 0) {
+    vpy_set_error_from_python();
+    goto done;
+  }
+  id = PyObject_CallMethod(vpy_runtime(), "stage_keyword", "OO", name, value);
+  if (id == NULL) {
+    vpy_set_error_from_python();
+    goto done;
+  }
+  g_staged_keyword = (int32_t)PyLong_AsLong(id);
+  if (PyErr_Occurred()) {
+    vpy_set_error_from_python();
+    goto done;
+  }
+  status = VPY_OK;
+
+done:
+  Py_XDECREF(id);
+  Py_XDECREF(name);
+  Py_XDECREF(value);
+  PyGILState_Release(gil);
+  return status;
+}
+
+VPY_EXPORT int32_t vpy_staged_keyword(void) { return g_staged_keyword; }
+
+/* Use the staged keyword arguments whose ids are listed in the buffer in the next call. */
+VPY_EXPORT int32_t vpy_use_keywords(void) {
+  PyGILState_STATE gil;
+  PyObject *ids;
+  int status = VPY_ERROR;
+
+  if (vpy_enter(&gil) != VPY_OK) {
+    return VPY_ERROR;
+  }
+  ids = vpy_buffer_as_str();
+  if (ids == NULL) {
+    vpy_set_error_from_python();
+  } else {
+    status = vpy_finish_call(PyObject_CallMethod(vpy_runtime(), "use_keywords", "O", ids));
+    Py_DECREF(ids);
+  }
   PyGILState_Release(gil);
   return status;
 }

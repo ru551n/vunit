@@ -68,6 +68,9 @@ VPY_EXPORT int32_t vpy_push_bits(int32_t is_signed);
 VPY_EXPORT int32_t vpy_push_array(int32_t length, int32_t width, int32_t height, int32_t depth, int32_t bit_width,
                                   int32_t is_signed);
 VPY_EXPORT int32_t vpy_array_write(const int32_t *chunk, int32_t length);
+VPY_EXPORT int32_t vpy_stage_keyword(void);
+VPY_EXPORT int32_t vpy_staged_keyword(void);
+VPY_EXPORT int32_t vpy_use_keywords(void);
 VPY_EXPORT int32_t vpy_execute(int32_t is_file);
 VPY_EXPORT int32_t vpy_call(void);
 VPY_EXPORT int32_t vpy_result(int32_t kind, int32_t width);
