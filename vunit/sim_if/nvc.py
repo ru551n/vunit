@@ -22,7 +22,7 @@ from . import SimulatorInterface, ListOfStringOption, StringOption
 from . import run_command, check_executable
 from ._viewermixin import ViewerMixin
 from ..vhdl_standard import VHDL
-from .. import python_bridge
+from ..python_bridge import simulator_hooks
 
 LOGGER = logging.getLogger(__name__)
 
@@ -307,7 +307,7 @@ class NVCInterface(SimulatorInterface, ViewerMixin):  # pylint: disable=too-many
                     config.vhdl_assert_stop_level
                 )
             cmd += config_sim_options
-            cmd += python_bridge.nvc_run_flags(self._project)
+            cmd += simulator_hooks.nvc_run_flags(self._project)
             cmd += [f"--exit-severity={config.vhdl_assert_stop_level}"]
 
             if not self._ieee_warnings_global and config.sim_options.get("disable_ieee_warnings", False):

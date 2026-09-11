@@ -493,10 +493,10 @@ in your VUnit Git repository? You have to do this first if installing using setu
         if not self._vhdl_standard >= VHDL.STD_2008:
             raise RuntimeError("VHDL Python support only supports vhdl 2008 and later")
 
-        from vunit import python_bridge  # pylint: disable=import-outside-toplevel
+        from vunit.python_bridge.bridge import setup  # pylint: disable=import-outside-toplevel
 
         vunit_context = VHDL_PATH / "vunit_context.vhd"
-        bridge = python_bridge.setup(
+        bridge = setup(
             self._vunit_obj._project,  # pylint: disable=protected-access
             self._vunit_obj._output_path,  # pylint: disable=protected-access
             self._simulator_class,
