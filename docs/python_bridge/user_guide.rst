@@ -59,9 +59,10 @@ python_execute
 --------------
 
 ``python_execute`` executes Python source code or a Python file. All code
-runs in one persistent namespace (``__main__``) that lives until the
-simulation ends. Names defined by one ``python_execute`` are therefore visible
-to later calls, whether inline or from files.
+runs in a persistent namespace that lives until the simulation ends. Names
+defined by one ``python_execute`` are therefore visible to later calls,
+whether inline or from files. Separate namespaces can be created with
+:ref:`sessions <vhdl_python_sessions>`.
 
 .. code-block:: vhdl
 
@@ -206,6 +207,58 @@ arrays are rejected; convert them explicitly with ``astype``. As usual, the
 returned ``integer_array_t`` is owned by the caller and can be freed with
 ``deallocate``.
 
+.. _vhdl_python_sessions:
+
+Sessions
+--------
+
+Every ``python_execute`` and ``python_call`` takes an optional last
+parameter, ``session``, which selects the namespace the operation runs in.
+A session is identified by a name of type ``python_session_t``, and is
+created the first time it is used. When no session is given, the
+``default_session`` constant is used, whose namespace is ``__main__``.
+
+.. code-block:: vhdl
+
+    constant golden : python_session_t := "golden";
+    constant fixed_point : python_session_t := "fixed_point";
+
+    ...
+
+    python_execute(file_name => "models/golden.py", session => golden);
+    python_execute(file_name => "models/fixed_point.py", session => fixed_point);
+
+    expected := python_call("model", input, session => golden);
+    got := python_call("model", input, session => fixed_point);
+
+Both files can define ``model`` without interfering. ``session`` can also be
+given positionally, for example ``python_call("model", input, golden)``.
+
+``python_session_t`` is a separate string type, rather than ``string``, so
+that the session parameter cannot be mistaken for a string argument. A
+``string`` value can be converted with ``python_session_t(name)``.
+
+Caveats
+~~~~~~~
+
+Sessions are separate namespaces in *one* Python interpreter, not separate
+interpreters (which would not work with NumPy and many other extension
+modules). Consequently, only the names defined by the executed code, such as
+functions, classes and variables, are separate. Everything else is shared:
+
+* Imported modules are loaded once and shared by all sessions. A module
+  imported in one session is the same module object in another session, so
+  changes to module state, such as ``np.random.seed(...)`` or attributes set
+  on a module, are visible in all sessions. The same applies to sibling
+  modules imported by a Python file executed in several sessions.
+* ``sys.path``, ``sys.modules``, environment variables, the current directory
+  and open files are process wide.
+* Only the default session runs in ``__main__``. Classes defined in other
+  sessions report ``__main__`` as their module but cannot be found there,
+  which matters for example when pickling their instances.
+* All sessions end with the simulation. Test cases run in the same simulation
+  (``run_all_in_same_sim``) share the sessions.
+
 Errors
 ------
 
@@ -286,5 +339,7 @@ Limitations
   additional values through the namespace instead, for example with
   ``python_execute("GAIN = " & to_string(gain))``.
 * ``real_vector``, records and other composite types are not converted.
-* One interpreter per simulation. The namespace is not reset between test
-  cases that run in the same simulation (``run_all_in_same_sim``).
+* One interpreter per simulation. Sessions provide separate namespaces but
+  share imported modules and all other interpreter state, see
+  :ref:`vhdl_python_sessions`. Namespaces are not reset between test cases
+  that run in the same simulation (``run_all_in_same_sim``).

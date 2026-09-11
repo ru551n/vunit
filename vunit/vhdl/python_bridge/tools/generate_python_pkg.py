@@ -57,6 +57,9 @@ FUNCTION_RESULTS = [
 PROCEDURE_RESULTS = ["std_ulogic_vector", "signed", "unsigned"]
 
 
+SESSION = "session : python_session_t := default_session"
+
+
 def _profile(argument):
     params = ["function_name : string"]
     if argument is not None:
@@ -77,11 +80,12 @@ def generate_spec():
     declarations = []
     for result, _ in FUNCTION_RESULTS:
         for argument in ARGUMENTS:
-            declarations.append(f"  impure function python_call({'; '.join(_profile(argument))}) return {result};")
+            params = _profile(argument) + [SESSION]
+            declarations.append(f"  impure function python_call({'; '.join(params)}) return {result};")
         declarations.append("")
     for result in PROCEDURE_RESULTS:
         for argument in ARGUMENTS:
-            params = _profile(argument) + [f"result : out {result}"]
+            params = _profile(argument) + [f"result : out {result}", SESSION]
             declarations.append(f"  procedure python_call({'; '.join(params)});")
         declarations.append("")
 
@@ -106,9 +110,15 @@ package python_pkg is
   -- Logger used to report Python errors, e.g. exceptions with their traceback.
   constant python_logger : logger_t := get_logger("vunit_lib:python");
 
+  -- A session is a named Python namespace. Sessions are created on first use
+  -- and are isolated from each other, e.g.
+  -- constant golden_model : python_session_t := "golden_model";
+  type python_session_t is array (positive range <>) of character;
+  constant default_session : python_session_t := "default";
+
   -- Execute Python source code (source) or a Python file (file_name). Relative
   -- file names are relative to the directory of the VUnit run script.
-  procedure python_execute(source : string := ""; file_name : string := "");
+  procedure python_execute(source : string := ""; file_name : string := ""; session : python_session_t := default_session);
 
 $declarations
 end package;
@@ -123,12 +133,13 @@ def generate_body():
     overloads = []
     for result, failure_value in FUNCTION_RESULTS:
         for argument in ARGUMENTS:
+            params = _profile(argument) + [SESSION]
             overloads.append(
                 f"""\
-  impure function python_call({'; '.join(_profile(argument))}) return {result} is
+  impure function python_call({'; '.join(params)}) return {result} is
   begin
-    if begin_call(function_name){_push(argument)} and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session){_push(argument)} and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return {failure_value};
   end;
@@ -136,13 +147,13 @@ def generate_body():
             )
     for result in PROCEDURE_RESULTS:
         for argument in ARGUMENTS:
-            params = _profile(argument) + [f"result : out {result}"]
+            params = _profile(argument) + [f"result : out {result}", SESSION]
             overloads.append(
                 f"""\
   procedure python_call({'; '.join(params)}) is
   begin
-    if begin_call(function_name){_push(argument)} and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session){_push(argument)} and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 """

@@ -152,7 +152,32 @@ package body python_pkg is
   -----------------------------------------------------------------------------
   -- python_execute
   -----------------------------------------------------------------------------
-  procedure python_execute(source : string := ""; file_name : string := "") is
+  function session_context(session : python_session_t) return string is
+  begin
+    if session = default_session then
+      return "";
+    end if;
+    return "session => """ & string(session) & """";
+  end;
+
+  -- Start an operation in a session
+  impure function begin_operation(session : python_session_t; operation : string) return boolean is
+  begin
+    return succeeded(send_string(string(session)), operation) and succeeded(vpy_begin, operation);
+  end;
+
+  procedure python_execute(source : string := ""; file_name : string := ""; session : python_session_t := default_session) is
+    function operation return string is
+    begin
+      if file_name /= "" and session /= default_session then
+        return "python_execute(file_name => """ & file_name & """, " & session_context(session) & ")";
+      elsif file_name /= "" then
+        return "python_execute(file_name => """ & file_name & """)";
+      elsif session /= default_session then
+        return "python_execute(" & session_context(session) & ")";
+      end if;
+      return "python_execute";
+    end;
     variable ok : boolean;
   begin
     if file_name /= "" then
@@ -160,33 +185,36 @@ package body python_pkg is
         failure(python_logger, "python_execute: give either source or file_name, not both");
         return;
       end if;
-      ok := succeeded(vpy_begin, "python_execute(file_name => """ & file_name & """)")
-            and succeeded(send_string(file_name), "python_execute")
-            and succeeded(vpy_execute(1), "python_execute(file_name => """ & file_name & """)");
+      ok := begin_operation(session, operation)
+            and succeeded(send_string(file_name), operation)
+            and succeeded(vpy_execute(1), operation);
     else
-      ok := succeeded(vpy_begin, "python_execute")
-            and succeeded(send_string(source), "python_execute")
-            and succeeded(vpy_execute(0), "python_execute");
+      ok := begin_operation(session, operation)
+            and succeeded(send_string(source), operation)
+            and succeeded(vpy_execute(0), operation);
     end if;
   end;
 
   -----------------------------------------------------------------------------
   -- python_call building blocks
   -----------------------------------------------------------------------------
-  function call_context(function_name : string) return string is
+  function call_context(function_name : string; session : python_session_t := default_session) return string is
   begin
-    return "python_call(""" & function_name & """)";
+    if session = default_session then
+      return "python_call(""" & function_name & """)";
+    end if;
+    return "python_call(""" & function_name & """, " & session_context(session) & ")";
   end;
 
-  impure function begin_call(function_name : string) return boolean is
+  impure function begin_call(function_name : string; session : python_session_t) return boolean is
   begin
-    return succeeded(vpy_begin, call_context(function_name));
+    return begin_operation(session, call_context(function_name, session));
   end;
 
-  impure function invoke(function_name : string) return boolean is
+  impure function invoke(function_name : string; session : python_session_t) return boolean is
   begin
-    return succeeded(send_string(function_name), call_context(function_name))
-      and succeeded(vpy_call, call_context(function_name));
+    return succeeded(send_string(function_name), call_context(function_name, session))
+      and succeeded(vpy_call, call_context(function_name, session));
   end;
 
   impure function push_arg(function_name : string; arg : integer) return boolean is
@@ -267,84 +295,86 @@ package body python_pkg is
     return true;
   end;
 
-  impure function convert_result(function_name : string; kind : integer; width : integer := -1) return boolean is
+  impure function convert_result(
+    function_name : string; session : python_session_t; kind : integer; width : integer := -1
+  ) return boolean is
   begin
-    return succeeded(vpy_result(kind, width), call_context(function_name));
+    return succeeded(vpy_result(kind, width), call_context(function_name, session));
   end;
 
-  impure function get_result(function_name : string) return integer is
+  impure function get_result(function_name : string; session : python_session_t) return integer is
   begin
-    if convert_result(function_name, kind_integer) then
+    if convert_result(function_name, session, kind_integer) then
       return vpy_result_integer;
     end if;
     return integer'low;
   end;
 
-  impure function get_result(function_name : string) return real is
+  impure function get_result(function_name : string; session : python_session_t) return real is
   begin
-    if convert_result(function_name, kind_real) then
+    if convert_result(function_name, session, kind_real) then
       return vpy_result_real;
     end if;
     return 0.0;
   end;
 
-  impure function get_result(function_name : string) return boolean is
+  impure function get_result(function_name : string; session : python_session_t) return boolean is
   begin
-    if convert_result(function_name, kind_boolean) then
+    if convert_result(function_name, session, kind_boolean) then
       return vpy_result_integer /= 0;
     end if;
     return false;
   end;
 
-  impure function get_result(function_name : string) return string is
+  impure function get_result(function_name : string; session : python_session_t) return string is
   begin
-    if convert_result(function_name, kind_string) then
+    if convert_result(function_name, session, kind_string) then
       return result_string;
     end if;
     return "";
   end;
 
-  impure function get_result(function_name : string) return std_ulogic is
+  impure function get_result(function_name : string; session : python_session_t) return std_ulogic is
   begin
-    if convert_result(function_name, kind_std_ulogic) then
+    if convert_result(function_name, session, kind_std_ulogic) then
       return to_logic(result_string)(0);
     end if;
     return 'U';
   end;
 
-  impure function get_result(function_name : string) return std_ulogic_vector is
+  impure function get_result(function_name : string; session : python_session_t) return std_ulogic_vector is
   begin
-    if convert_result(function_name, kind_std_ulogic_vector) then
+    if convert_result(function_name, session, kind_std_ulogic_vector) then
       return to_logic(result_string);
     end if;
     return "";
   end;
 
-  impure function get_result(function_name : string) return integer_array_t is
+  impure function get_result(function_name : string; session : python_session_t) return integer_array_t is
   begin
-    if convert_result(function_name, kind_integer_array) then
+    if convert_result(function_name, session, kind_integer_array) then
       return result_array;
     end if;
     return null_integer_array;
   end;
 
-  procedure get_result(function_name : string; result : out std_ulogic_vector) is
+  procedure get_result(function_name : string; session : python_session_t; result : out std_ulogic_vector) is
   begin
-    if convert_result(function_name, kind_std_ulogic_vector, result'length) then
+    if convert_result(function_name, session, kind_std_ulogic_vector, result'length) then
       result := to_logic(result_string);
     end if;
   end;
 
-  procedure get_result(function_name : string; result : out signed) is
+  procedure get_result(function_name : string; session : python_session_t; result : out signed) is
   begin
-    if convert_result(function_name, kind_signed, result'length) then
+    if convert_result(function_name, session, kind_signed, result'length) then
       result := signed(to_logic(result_string));
     end if;
   end;
 
-  procedure get_result(function_name : string; result : out unsigned) is
+  procedure get_result(function_name : string; session : python_session_t; result : out unsigned) is
   begin
-    if convert_result(function_name, kind_unsigned, result'length) then
+    if convert_result(function_name, session, kind_unsigned, result'length) then
       result := unsigned(to_logic(result_string));
     end if;
   end;
@@ -352,850 +382,850 @@ package body python_pkg is
   -----------------------------------------------------------------------------
   -- python_call
   -----------------------------------------------------------------------------
-  impure function python_call(function_name : string) return integer is
+  impure function python_call(function_name : string; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : integer) return integer is
+  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : real) return integer is
+  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : boolean) return integer is
+  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : string) return integer is
+  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic) return integer is
+  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector) return integer is
+  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : signed) return integer is
+  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : unsigned) return integer is
+  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t) return integer is
+  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t) return integer is
+  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session) return integer is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return integer'low;
   end;
 
-  impure function python_call(function_name : string) return real is
+  impure function python_call(function_name : string; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : integer) return real is
+  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : real) return real is
+  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : boolean) return real is
+  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : string) return real is
+  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic) return real is
+  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector) return real is
+  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : signed) return real is
+  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : unsigned) return real is
+  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t) return real is
+  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t) return real is
+  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session) return real is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 0.0;
   end;
 
-  impure function python_call(function_name : string) return boolean is
+  impure function python_call(function_name : string; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : integer) return boolean is
+  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : real) return boolean is
+  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : boolean) return boolean is
+  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : string) return boolean is
+  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic) return boolean is
+  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector) return boolean is
+  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : signed) return boolean is
+  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : unsigned) return boolean is
+  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t) return boolean is
+  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t) return boolean is
+  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session) return boolean is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return false;
   end;
 
-  impure function python_call(function_name : string) return string is
+  impure function python_call(function_name : string; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : integer) return string is
+  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : real) return string is
+  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : boolean) return string is
+  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : string) return string is
+  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic) return string is
+  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector) return string is
+  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : signed) return string is
+  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : unsigned) return string is
+  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t) return string is
+  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t) return string is
+  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session) return string is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string) return std_ulogic is
+  impure function python_call(function_name : string; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : integer) return std_ulogic is
+  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : real) return std_ulogic is
+  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : boolean) return std_ulogic is
+  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : string) return std_ulogic is
+  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic) return std_ulogic is
+  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector) return std_ulogic is
+  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : signed) return std_ulogic is
+  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : unsigned) return std_ulogic is
+  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t) return std_ulogic is
+  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t) return std_ulogic is
+  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session) return std_ulogic is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return 'U';
   end;
 
-  impure function python_call(function_name : string) return std_ulogic_vector is
+  impure function python_call(function_name : string; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : integer) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : real) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : boolean) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : string) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : signed) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : unsigned) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t) return std_ulogic_vector is
+  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t) return std_ulogic_vector is
+  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session) return std_ulogic_vector is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return "";
   end;
 
-  impure function python_call(function_name : string) return integer_array_t is
+  impure function python_call(function_name : string; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : integer) return integer_array_t is
+  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : real) return integer_array_t is
+  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : boolean) return integer_array_t is
+  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : string) return integer_array_t is
+  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic) return integer_array_t is
+  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector) return integer_array_t is
+  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : signed) return integer_array_t is
+  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : unsigned) return integer_array_t is
+  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t) return integer_array_t is
+  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t) return integer_array_t is
+  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session) return integer_array_t is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      return get_result(function_name);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      return get_result(function_name, session);
     end if;
     return null_integer_array;
   end;
 
-  procedure python_call(function_name : string; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : integer; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : real; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : real; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : boolean; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : boolean; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : string; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : string; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : std_ulogic; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : signed; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : signed; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : unsigned; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : unsigned; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer_array_t; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; arg : integer_array_t; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out std_ulogic_vector) is
+  procedure python_call(function_name : string; args : integer_array_vec_t; result : out std_ulogic_vector; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; result : out signed) is
+  procedure python_call(function_name : string; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer; result : out signed) is
+  procedure python_call(function_name : string; arg : integer; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : real; result : out signed) is
+  procedure python_call(function_name : string; arg : real; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : boolean; result : out signed) is
+  procedure python_call(function_name : string; arg : boolean; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : string; result : out signed) is
+  procedure python_call(function_name : string; arg : string; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic; result : out signed) is
+  procedure python_call(function_name : string; arg : std_ulogic; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out signed) is
+  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : signed; result : out signed) is
+  procedure python_call(function_name : string; arg : signed; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : unsigned; result : out signed) is
+  procedure python_call(function_name : string; arg : unsigned; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer_array_t; result : out signed) is
+  procedure python_call(function_name : string; arg : integer_array_t; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out signed) is
+  procedure python_call(function_name : string; args : integer_array_vec_t; result : out signed; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; result : out unsigned) is
+  procedure python_call(function_name : string; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer; result : out unsigned) is
+  procedure python_call(function_name : string; arg : integer; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : real; result : out unsigned) is
+  procedure python_call(function_name : string; arg : real; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : boolean; result : out unsigned) is
+  procedure python_call(function_name : string; arg : boolean; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : string; result : out unsigned) is
+  procedure python_call(function_name : string; arg : string; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic; result : out unsigned) is
+  procedure python_call(function_name : string; arg : std_ulogic; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out unsigned) is
+  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : signed; result : out unsigned) is
+  procedure python_call(function_name : string; arg : signed; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : unsigned; result : out unsigned) is
+  procedure python_call(function_name : string; arg : unsigned; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer_array_t; result : out unsigned) is
+  procedure python_call(function_name : string; arg : integer_array_t; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, arg) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, arg) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out unsigned) is
+  procedure python_call(function_name : string; args : integer_array_vec_t; result : out unsigned; session : python_session_t := default_session) is
   begin
-    if begin_call(function_name) and push_arg(function_name, args) and invoke(function_name) then
-      get_result(function_name, result);
+    if begin_call(function_name, session) and push_arg(function_name, args) and invoke(function_name, session) then
+      get_result(function_name, session, result);
     end if;
   end;
 end package body;

@@ -53,6 +53,8 @@ INTEGER_HIGH = 2**31 - 1
 TEXT_ENCODING = "utf-8"
 TEXT_ERRORS = "surrogateescape"
 
+DEFAULT_SESSION = "default"
+
 _NO_VALUE = object()
 
 
@@ -80,7 +82,9 @@ class Runtime:
 
     def __init__(self, base_dir, prefix):
         self._base_dir = Path(base_dir)
-        self._namespace = __main__.__dict__
+        # One namespace per session. The default session uses __main__.
+        self._sessions = {DEFAULT_SESSION: __main__.__dict__}
+        self._session = DEFAULT_SESSION
         self._inline_count = 0
         self._result = _NO_VALUE
         self._function_name = ""
@@ -134,6 +138,21 @@ class Runtime:
         self._flush()
         return "".join(traceback.format_exception(type(exc), exc, traceback_)).rstrip("\n")
 
+    def select_session(self, name):
+        """
+        Make the namespace of a session current, creating it on first use.
+        """
+        if name not in self._sessions:
+            self._sessions[name] = {"__name__": "__main__", "__builtins__": builtins}
+        self._session = name
+
+    @property
+    def _namespace(self):
+        """
+        Namespace of the current session.
+        """
+        return self._sessions[self._session]
+
     # ------------------------------------------------------------------
     # python_execute
     # ------------------------------------------------------------------
@@ -155,7 +174,10 @@ class Runtime:
         Execute inline source code, registered in linecache for readable tracebacks.
         """
         self._inline_count += 1
-        file_name = f"<python_execute #{self._inline_count}>"
+        if self._session == DEFAULT_SESSION:
+            file_name = f"<python_execute #{self._inline_count}>"
+        else:
+            file_name = f"<python_execute {self._session} #{self._inline_count}>"
         # Make tracebacks show the source lines of inline code
         linecache.cache[file_name] = (len(source), None, source.splitlines(True), file_name)
         code = compile(source, file_name, "exec", dont_inherit=True)
