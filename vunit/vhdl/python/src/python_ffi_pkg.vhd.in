@@ -1,0 +1,200 @@
+-- This Source Code Form is subject to the terms of the Mozilla Public
+-- License, v. 2.0. If a copy of the MPL was not distributed with this file,
+-- You can obtain one at http://mozilla.org/MPL/2.0/.
+--
+-- Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
+--
+-- PRIVATE foreign subprograms of the VUnit Python bridge (vunit_python_bridge.c).
+--
+-- This file is a template. VUnit substitutes the library token with the name
+-- the simulator uses to find the bridge library and compiles the result into
+-- vunit_lib when Python support is enabled (add_vhdl_builtins(python=True)).
+--
+-- Only scalars and constrained arrays cross the foreign interface since their
+-- ABI is identical for NVC and GHDL on all platforms.
+
+package python_ffi_pkg is
+  constant chunk_length : positive := 1024;
+  subtype string_chunk_t is string(1 to chunk_length);
+  subtype integer_chunk_t is integer_vector(0 to chunk_length - 1);
+
+  impure function vpy_buffer_clear return integer;
+  attribute foreign of vpy_buffer_clear : function is "VHPIDIRECT {library} vpy_buffer_clear";
+
+  impure function vpy_buffer_append(chunk : string_chunk_t; length : integer) return integer;
+  attribute foreign of vpy_buffer_append : function is "VHPIDIRECT {library} vpy_buffer_append";
+
+  impure function vpy_begin return integer;
+  attribute foreign of vpy_begin : function is "VHPIDIRECT {library} vpy_begin";
+
+  impure function vpy_push_string return integer;
+  attribute foreign of vpy_push_string : function is "VHPIDIRECT {library} vpy_push_string";
+
+  impure function vpy_push_integer(value : integer) return integer;
+  attribute foreign of vpy_push_integer : function is "VHPIDIRECT {library} vpy_push_integer";
+
+  impure function vpy_push_real(value : real) return integer;
+  attribute foreign of vpy_push_real : function is "VHPIDIRECT {library} vpy_push_real";
+
+  impure function vpy_push_boolean(value : integer) return integer;
+  attribute foreign of vpy_push_boolean : function is "VHPIDIRECT {library} vpy_push_boolean";
+
+  impure function vpy_push_bits(is_signed : integer) return integer;
+  attribute foreign of vpy_push_bits : function is "VHPIDIRECT {library} vpy_push_bits";
+
+  impure function vpy_push_array(length, width, height, depth, bit_width, is_signed : integer) return integer;
+  attribute foreign of vpy_push_array : function is "VHPIDIRECT {library} vpy_push_array";
+
+  impure function vpy_array_write(chunk : integer_chunk_t; length : integer) return integer;
+  attribute foreign of vpy_array_write : function is "VHPIDIRECT {library} vpy_array_write";
+
+  impure function vpy_execute(is_file : integer) return integer;
+  attribute foreign of vpy_execute : function is "VHPIDIRECT {library} vpy_execute";
+
+  impure function vpy_call return integer;
+  attribute foreign of vpy_call : function is "VHPIDIRECT {library} vpy_call";
+
+  impure function vpy_result(kind, width : integer) return integer;
+  attribute foreign of vpy_result : function is "VHPIDIRECT {library} vpy_result";
+
+  impure function vpy_result_integer return integer;
+  attribute foreign of vpy_result_integer : function is "VHPIDIRECT {library} vpy_result_integer";
+
+  impure function vpy_result_real return real;
+  attribute foreign of vpy_result_real : function is "VHPIDIRECT {library} vpy_result_real";
+
+  impure function vpy_result_meta(idx : integer) return integer;
+  attribute foreign of vpy_result_meta : function is "VHPIDIRECT {library} vpy_result_meta";
+
+  impure function vpy_error_length return integer;
+  attribute foreign of vpy_error_length : function is "VHPIDIRECT {library} vpy_error_length";
+
+  procedure vpy_result_read_string(chunk : out string_chunk_t; offset, length : integer);
+  attribute foreign of vpy_result_read_string : procedure is "VHPIDIRECT {library} vpy_result_read_string";
+
+  procedure vpy_result_read_integers(chunk : out integer_chunk_t; offset, length : integer);
+  attribute foreign of vpy_result_read_integers : procedure is "VHPIDIRECT {library} vpy_result_read_integers";
+
+  procedure vpy_error_read(chunk : out string_chunk_t; offset, length : integer);
+  attribute foreign of vpy_error_read : procedure is "VHPIDIRECT {library} vpy_error_read";
+end package;
+
+package body python_ffi_pkg is
+  -- The bodies are replaced by the foreign implementations and never executed.
+  impure function vpy_buffer_clear return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_buffer_clear is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_buffer_append(chunk : string_chunk_t; length : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_buffer_append is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_begin return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_begin is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_push_string return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_push_string is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_push_integer(value : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_push_integer is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_push_real(value : real) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_push_real is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_push_boolean(value : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_push_boolean is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_push_bits(is_signed : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_push_bits is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_push_array(length, width, height, depth, bit_width, is_signed : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_push_array is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_array_write(chunk : integer_chunk_t; length : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_array_write is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_execute(is_file : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_execute is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_call return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_call is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_result(kind, width : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_result is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_result_integer return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_result_integer is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_result_real return real is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_result_real is not bound" severity failure;
+    return 0.0;
+  end;
+
+  impure function vpy_result_meta(idx : integer) return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_result_meta is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_error_length return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_error_length is not bound" severity failure;
+    return 1;
+  end;
+
+  procedure vpy_result_read_string(chunk : out string_chunk_t; offset, length : integer) is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_result_read_string is not bound" severity failure;
+  end;
+
+  procedure vpy_result_read_integers(chunk : out integer_chunk_t; offset, length : integer) is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_result_read_integers is not bound" severity failure;
+  end;
+
+  procedure vpy_error_read(chunk : out string_chunk_t; offset, length : integer) is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_error_read is not bound" severity failure;
+  end;
+end package body;
