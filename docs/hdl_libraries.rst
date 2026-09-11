@@ -25,7 +25,7 @@ Most of the utilities are based on some internal data types providing dynamic ar
 See :ref:`data_types_library`.
 
 With ``add_vhdl_builtins(python=True)``, the builtins also include
-:vunit_file:`python <vunit/vhdl/python>`, which lets testbenches execute Python code and call Python functions
+:vunit_file:`python_bridge <vunit/vhdl/python_bridge>`, which lets testbenches execute Python code and call Python functions
 (NVC and GHDL only). See :ref:`vhdl_python`.
 
 Communication

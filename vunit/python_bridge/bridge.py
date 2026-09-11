@@ -18,7 +18,7 @@ from weakref import WeakKeyDictionary
 from .native_library import PACKAGE_PATH, check_python_build, prepare_library, windows_python_dll
 
 RUNTIME_SOURCE = PACKAGE_PATH / "runtime.py"
-VHDL_SOURCE_PATH = PACKAGE_PATH.parent / "vhdl" / "python" / "src"
+VHDL_SOURCE_PATH = PACKAGE_PATH.parent / "vhdl" / "python_bridge" / "src"
 FFI_PACKAGE_TEMPLATE = VHDL_SOURCE_PATH / "python_ffi_pkg.vhd.in"
 CONFIG_FILE_NAME = "vunit_python_bridge.cfg"
 
