@@ -124,9 +124,12 @@ jobs:
     - name: '🚧 Feature tests again (cached bridge, no compilation)'
       env:
         VUNIT_SIMULATOR: ${{ matrix.sim }}
-        CC: /nonexistent/compiler
       run: |
+        before="$(ls -l --time-style=full-iso "$RUNNER_TEMP"/out\ dir/python_bridge/*/libvunit_python_bridge.so)"
         "$RUNNER_TEMP/venv with space/bin/python" vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
+        after="$(ls -l --time-style=full-iso "$RUNNER_TEMP"/out\ dir/python_bridge/*/libvunit_python_bridge.so)"
+        echo "$after"
+        test "$before" = "$after"
 
     - name: '🚧 Example'
       env:
