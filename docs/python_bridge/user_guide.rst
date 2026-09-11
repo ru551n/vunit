@@ -1,11 +1,12 @@
-.. _vhdl_python:
+.. _python_bridge:
 
 Calling Python from VHDL
 ========================
 
 VUnit can embed a Python interpreter in the simulator so that VHDL testbenches
 can execute Python code and call Python functions, for example reference
-models written with NumPy. The feature is enabled with ``python=True``:
+models written with NumPy. This is called VHDL Python support and is enabled
+with ``python=True``:
 
 .. code-block:: python
 
@@ -44,7 +45,7 @@ Requirements
 * NumPy, but only if ``integer_array_t`` values are exchanged.
 * Linux: a C compiler (``cc``, ``gcc`` or ``clang``, or ``CC``) and the Python
   development headers (for example the ``python3-dev`` package) since the
-  bridge library is compiled on first use, see :ref:`vhdl_python_native`.
+  bridge library is compiled on first use, see :ref:`python_bridge:native`.
   Python must provide a shared ``libpython`` (``--enable-shared``), which is
   the case for distribution Pythons, ``actions/setup-python``, ``uv`` and
   ``pyenv`` builds with default settings.
@@ -66,7 +67,7 @@ python_execute
 runs in a persistent namespace that lives until the simulation ends. Names
 defined by one ``python_execute`` are therefore visible to later calls,
 whether inline or from files. Separate namespaces can be created with
-:ref:`sessions <vhdl_python_sessions>`.
+:ref:`sessions <python_bridge:sessions>`.
 
 .. code-block:: vhdl
 
@@ -243,7 +244,7 @@ arrays are rejected; convert them explicitly with ``astype``. As usual, the
 returned ``integer_array_t`` is owned by the caller and can be freed with
 ``deallocate``.
 
-.. _vhdl_python_sessions:
+.. _python_bridge:sessions:
 
 Sessions
 --------
@@ -317,7 +318,7 @@ failure.
 Output of ``print`` is written to the simulator output and flushed after
 every operation.
 
-.. _vhdl_python_native:
+.. _python_bridge:native:
 
 How it works
 ------------
@@ -376,5 +377,5 @@ Limitations
 * ``real_vector``, records and other composite types are not converted.
 * One interpreter per simulation. Sessions provide separate namespaces but
   share imported modules and all other interpreter state, see
-  :ref:`vhdl_python_sessions`. Namespaces are not reset between test cases
+  :ref:`python_bridge:sessions`. Namespaces are not reset between test cases
   that run in the same simulation (``run_all_in_same_sim``).

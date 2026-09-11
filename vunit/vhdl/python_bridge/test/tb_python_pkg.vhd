@@ -54,12 +54,12 @@ begin
 
     while test_suite loop
 
-      if run("inline source") then
+      if run("Test inline source") then
         python_execute(source => "X = 6 * 7");
         python_execute(source => "def get_x():" & LF & "    return X");
         check_equal(integer'(python_call("get_x")), 42);
 
-      elsif run("multiline source with blank lines and indentation") then
+      elsif run("Test multiline source with blank lines and indentation") then
         python_execute(
           source =>
             "def double(x):" & LF &
@@ -71,7 +71,7 @@ begin
         check_equal(integer'(python_call("double", 21)), 42);
         check_equal(integer'(python_call("double", -5)), -10);
 
-      elsif run("+ joins source lines") then
+      elsif run("Test that + joins source lines") then
         check_equal(string'("a" + "b"), "a" & LF & "b");
         check_equal(string'("a" + "" + "b"), "a" & LF & LF & "b");
         python_execute(
@@ -81,11 +81,11 @@ begin
         );
         check_equal(integer'(python_call("triple", 14)), 42);
 
-      elsif run("+ on strings does not disturb numeric_std arithmetic") then
+      elsif run("Test that + on strings does not disturb numeric_std arithmetic") then
         check_equal(to_integer(unsigned'("0011") + "0001"), 4);
         check_equal(to_integer(signed'("1110") + signed'("0001")), -1);
 
-      elsif run("persistent namespace across execute and call") then
+      elsif run("Test persistent namespace across execute and call") then
         python_execute(source => "COUNTER = 0");
         python_execute(
           source =>
@@ -98,15 +98,15 @@ begin
         check_equal(integer'(python_call("inc")), 2);
         check_equal(integer'(python_call("inc")), 3);
 
-      elsif run("execute file with relative file name") then
+      elsif run("Test executing a file with a relative file name") then
         python_execute(file_name => "test/models/reference_model.py");
         check_equal(string'(python_call("get_model_dir")), tb_path(runner_cfg) & "models");
 
-      elsif run("execute file with absolute file name") then
+      elsif run("Test executing a file with an absolute file name") then
         python_execute(file_name => tb_path(runner_cfg) & "models/reference_model.py");
         check_equal(string'(python_call("get_model_dir")), tb_path(runner_cfg) & "models");
 
-      elsif run("__file__ is set during file execution and restored after") then
+      elsif run("Test that __file__ is set during file execution and restored after") then
         python_execute(file_name => "test/models/reference_model.py");
         check_equal(
           string'(python_call("get_file_during_exec")),
@@ -115,24 +115,24 @@ begin
         python_execute(source => "def after_file_absent():" & LF & "    return '__file__' not in globals()");
         check_true(python_call("after_file_absent"));
 
-      elsif run("sibling import without PYTHONPATH, sys.path restored") then
+      elsif run("Test sibling import without PYTHONPATH and that sys.path is restored") then
         python_execute(source => "GAIN = 3");
         python_execute(file_name => "test/models/importer.py");
         check_equal(integer'(python_call("scaled", 2)), 9); -- fir(2) = 3, 3 * GAIN(3) = 9
         check_false(python_call("dir_in_syspath"));
 
-      elsif run("re-executing a file executes it again") then
+      elsif run("Test that re-executing a file executes it again") then
         python_execute(file_name => "test/models/counter.py");
         python_execute(file_name => "test/models/counter.py");
         check_equal(integer'(python_call("get_call_count")), 2);
 
-      elsif run("python_execute with both source and file_name fails") then
+      elsif run("Test that python_execute with both source and file_name fails") then
         mock(python_logger, failure);
         python_execute(source => "pass", file_name => "test/models/counter.py");
         check_only_log(python_logger, "python_execute: give either source or file_name, not both", failure);
         unmock(python_logger);
 
-      elsif run("python_execute with missing file fails") then
+      elsif run("Test that python_execute with a missing file fails") then
         -- The error message shows the path in the native format of the OS
         python_execute(source => "import os" & LF & "def native_repr(path):" & LF & "    return repr(os.path.normpath(path))");
         mock(python_logger, failure);
@@ -147,7 +147,7 @@ begin
         );
         unmock(python_logger);
 
-      elsif run("python exception with traceback logs a failure") then
+      elsif run("Test that a Python exception with traceback logs a failure") then
         mock(python_logger, failure);
         python_execute(source => "raise ValueError(""boom"")");
         check_only_log(
@@ -162,35 +162,35 @@ begin
         unmock(python_logger);
 
 
-      elsif run("zero-arg call") then
+      elsif run("Test call without arguments") then
         python_execute(source => "def answer():" & LF & "    return 42");
         check_equal(integer'(python_call("answer")), 42);
 
-      elsif run("integer round trip including bounds") then
+      elsif run("Test integer round trip including bounds") then
         python_execute(source => "def identity_int(x):" & LF & "    return x");
         check_equal(integer'(python_call("identity_int", 0)), 0);
         check_equal(integer'(python_call("identity_int", 123456)), 123456);
         check_equal(integer'(python_call("identity_int", integer'low)), integer'low);
         check_equal(integer'(python_call("identity_int", integer'high)), integer'high);
 
-      elsif run("real round trip") then
+      elsif run("Test real round trip") then
         python_execute(source => "def identity_real(x):" & LF & "    return x");
         check_equal(real'(python_call("identity_real", 0.0)), 0.0);
         check_equal(real'(python_call("identity_real", 3.5)), 3.5);
         check_equal(real'(python_call("identity_real", -2.25)), -2.25);
 
-      elsif run("boolean round trip") then
+      elsif run("Test boolean round trip") then
         python_execute(source => "def identity_bool(x):" & LF & "    return x");
         check_true(python_call("identity_bool", true));
         check_false(python_call("identity_bool", false));
 
-      elsif run("string round trip including non-ascii") then
+      elsif run("Test string round trip including non-ASCII") then
         python_execute(source => "def identity_str(x):" & LF & "    return x");
         check_equal(string'(python_call("identity_str", string'(""))), string'(""));
         check_equal(string'(python_call("identity_str", string'("hello"))), string'("hello"));
         check_equal(string'(python_call("identity_str", string'("café å"))), string'("café å"));
 
-      elsif run("std_ulogic all 9 states round trip") then
+      elsif run("Test std_ulogic round trip of all 9 states") then
         python_execute(source => "def identity_logic(x):" & LF & "    return x");
         for idx in std_ulogic_characters'range loop
           check_equal(
@@ -199,29 +199,29 @@ begin
           );
         end loop;
 
-      elsif run("std_ulogic_vector round trip, descending range, all states") then
+      elsif run("Test std_ulogic_vector round trip with descending range") then
         python_execute(source => "def identity_slv(x):" & LF & "    return x");
         result_vec9 := python_call("identity_slv", slv9_desc);
         check_equal(result_vec9, slv9_desc);
 
-      elsif run("std_ulogic_vector round trip, ascending range, all states") then
+      elsif run("Test std_ulogic_vector round trip with ascending range") then
         python_execute(source => "def identity_slv(x):" & LF & "    return x");
         result_vec9 := python_call("identity_slv", slv9_asc);
         check_equal(result_vec9, slv9_asc);
 
-      elsif run("signed argument round trip incl negative and bounds") then
+      elsif run("Test signed argument round trip including negative and bounds") then
         python_execute(source => "def identity_int(x):" & LF & "    return x");
         check_equal(integer'(python_call("identity_int", to_signed(-128, 8))), -128);
         check_equal(integer'(python_call("identity_int", to_signed(127, 8))), 127);
         check_equal(integer'(python_call("identity_int", to_signed(-1, 8))), -1);
         check_equal(integer'(python_call("identity_int", to_signed(0, 8))), 0);
 
-      elsif run("unsigned argument round trip incl bounds") then
+      elsif run("Test unsigned argument round trip including bounds") then
         python_execute(source => "def identity_int(x):" & LF & "    return x");
         check_equal(integer'(python_call("identity_int", to_unsigned(0, 8))), 0);
         check_equal(integer'(python_call("identity_int", to_unsigned(255, 8))), 255);
 
-      elsif run("signed/unsigned procedure result round trip incl exact bounds") then
+      elsif run("Test signed and unsigned procedure results including exact bounds") then
         python_execute(source => "def identity_int(x):" & LF & "    return x");
 
         python_call("identity_int", -128, s8);
@@ -236,13 +236,13 @@ begin
         python_call("identity_int", 255, u8);
         check_equal(u8, to_unsigned(255, 8));
 
-      elsif run("repeated calls") then
+      elsif run("Test repeated calls") then
         python_execute(source => "def identity_int(x):" & LF & "    return x");
         for i in 0 to 999 loop
           check_equal(integer'(python_call("identity_int", i)), i);
         end loop;
 
-      elsif run("wrong return type fails") then
+      elsif run("Test that a wrong return type fails") then
         python_execute(source => "def returns_none():" & LF & "    return None");
         mock(python_logger, failure);
         discard_int := python_call("returns_none");
@@ -254,7 +254,7 @@ begin
         );
         unmock(python_logger);
 
-      elsif run("integer overflow fails") then
+      elsif run("Test that integer overflow fails") then
         python_execute(source => "def too_big():" & LF & "    return 2**31");
         mock(python_logger, failure);
         discard_int := python_call("too_big");
@@ -267,7 +267,7 @@ begin
         );
         unmock(python_logger);
 
-      elsif run("signed overflow in procedure result fails") then
+      elsif run("Test that signed overflow in a procedure result fails") then
         python_execute(source => "def identity_int(x):" & LF & "    return x");
         mock(python_logger, failure);
         python_call("identity_int", 200, s8);
@@ -279,7 +279,7 @@ begin
         );
         unmock(python_logger);
 
-      elsif run("unsigned overflow in procedure result fails") then
+      elsif run("Test that unsigned overflow in a procedure result fails") then
         python_execute(source => "def identity_int(x):" & LF & "    return x");
         mock(python_logger, failure);
         python_call("identity_int", -1, u8);
@@ -291,7 +291,7 @@ begin
         );
         unmock(python_logger);
 
-      elsif run("metavalue in signed argument fails") then
+      elsif run("Test that a metavalue in a signed argument fails") then
         python_execute(source => "def identity_int(x):" & LF & "    return x");
         s4 := (3 => '1', 2 => '0', 1 => 'X', 0 => '1');
         mock(python_logger, failure);
@@ -304,7 +304,7 @@ begin
         );
         unmock(python_logger);
 
-      elsif run("std_ulogic_vector length mismatch in procedure form fails") then
+      elsif run("Test that a std_ulogic_vector length mismatch in a procedure result fails") then
         python_execute(source => "def wrong_length_bits():" & LF & "    return ""01011""");
         mock(python_logger, failure);
         python_call("wrong_length_bits", slv4);
@@ -316,7 +316,7 @@ begin
         );
         unmock(python_logger);
 
-      elsif run("undefined function fails") then
+      elsif run("Test that an undefined function fails") then
         mock(python_logger, failure);
         discard_int := python_call("no_such_function");
         check_only_log(
@@ -328,7 +328,7 @@ begin
         unmock(python_logger);
 
 
-      elsif run("2D array preserves axis orientation, get(a,x,y) == a[y,x]") then
+      elsif run("Test that a 2D array preserves axis orientation, get(a, x, y) is a[y, x]") then
         arr := new_2d(width => 3, height => 2, bit_width => 16, is_signed => false);
         for y in 0 to 1 loop
           for x in 0 to 2 loop
@@ -342,7 +342,7 @@ begin
         );
         check_true(python_call("orientation_ok", arr));
 
-      elsif run("3D array preserves axis orientation, get(a,x,y,z) == a[y,x,z]") then
+      elsif run("Test that a 3D array preserves axis orientation, get(a, x, y, z) is a[y, x, z]") then
         arr := new_3d(width => 3, height => 2, depth => 4, bit_width => 16, is_signed => false);
         for y in 0 to 1 loop
           for x in 0 to 2 loop
@@ -358,7 +358,7 @@ begin
         );
         check_true(python_call("orientation_ok3", arr));
 
-      elsif run("returned 2D and 3D arrays preserve axis orientation") then
+      elsif run("Test that returned 2D and 3D arrays preserve axis orientation") then
         python_execute(
           source =>
             "import numpy as np" & LF &
@@ -391,7 +391,7 @@ begin
           end loop;
         end loop;
 
-      elsif run("metadata preserved when returning the same array argument") then
+      elsif run("Test that metadata is preserved when returning the same array argument") then
         arr := new_1d(length => 4, bit_width => 12, is_signed => true);
         set(arr, 0, -2048);
         set(arr, 1, -1);
@@ -406,7 +406,7 @@ begin
           check_equal(get(result, idx), get(arr, idx));
         end loop;
 
-      elsif run("metadata derived from dtype for a newly created array") then
+      elsif run("Test that metadata is derived from dtype for a newly created array") then
         arr := new_1d(length => 4, bit_width => 10, is_signed => false);
         set(arr, 0, 0);
         set(arr, 1, 1);
@@ -427,7 +427,7 @@ begin
         check_equal(get(result, 2), 500 mod 256);
         check_equal(get(result, 3), 1023 mod 256);
 
-      elsif run("zero array arguments") then
+      elsif run("Test call with zero array arguments") then
         python_execute(
           source =>
             "def sum_arrays(*args):" & LF &
@@ -441,7 +441,7 @@ begin
           0
         );
 
-      elsif run("one array argument") then
+      elsif run("Test call with one array argument") then
         python_execute(
           source =>
             "def sum_arrays(*args):" & LF &
@@ -456,7 +456,7 @@ begin
         set(arr, 2, 3);
         check_equal(integer'(python_call("sum_arrays", arg => arr)), 6);
 
-      elsif run("two array arguments") then
+      elsif run("Test call with two array arguments") then
         python_execute(
           source =>
             "def sum_arrays(*args):" & LF &
@@ -474,7 +474,7 @@ begin
         set(arr_b, 1, 20);
         check_equal(integer'(python_call("sum_arrays", args => (arr, arr_b))), 36);
 
-      elsif run("five array arguments") then
+      elsif run("Test call with five array arguments") then
         python_execute(
           source =>
             "def sum_arrays(*args):" & LF &
@@ -495,7 +495,7 @@ begin
         set(arr_e, 0, 5);
         check_equal(integer'(python_call("sum_arrays", args => (arr, arr_b, arr_c, arr_d, arr_e))), 15);
 
-      elsif run("returning a new array with a different shape") then
+      elsif run("Test returning a new array with a different shape") then
         arr := new_2d(width => 3, height => 2, bit_width => 16, is_signed => false);
         for y in 0 to 1 loop
           for x in 0 to 2 loop
@@ -514,7 +514,7 @@ begin
         check_equal(get(result, 4), 11);
         check_equal(get(result, 5), 12);
 
-      elsif run("null/empty array round trip") then
+      elsif run("Test null array round trip") then
         arr := new_1d(length => 0, bit_width => 16, is_signed => false);
         python_execute(source => "def identity(a):" & LF & "    return a");
         result := python_call("identity", arr);

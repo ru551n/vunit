@@ -1261,7 +1261,7 @@ other preprocessors. Lowest value first. The order between preprocessors with th
         :param use_external_log: path to external implementation of common_log_pkg-body to allow
             VUnit log messages to be redirected to another logging framework.
         :param python: Add ``python_execute`` and ``python_call`` to ``vunit_context`` for calling
-            Python from VHDL. Requires VHDL-2008 or later and NVC or GHDL, see :ref:`vhdl_python`.
+            Python from VHDL. Requires VHDL-2008 or later and NVC or GHDL, see :ref:`python_bridge`.
 
         :example:
 

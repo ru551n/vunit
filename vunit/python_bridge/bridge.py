@@ -43,7 +43,7 @@ class PythonBridge:
     A prepared bridge: native library, its configuration and the generated VHDL.
     """
 
-    def __init__(self, library_file: Path, vhdl_files: List[Path]):
+    def __init__(self, library_file: Path, vhdl_files: List[Path]) -> None:
         self.library_file = library_file
         self.vhdl_files = vhdl_files
 
@@ -52,7 +52,7 @@ class PythonBridge:
         return self.library_file.parent
 
 
-def setup(project, output_path, simulator_class, vunit_context_file: Path) -> PythonBridge:
+def setup(project, output_path: str, simulator_class, vunit_context_file: Path) -> PythonBridge:
     """
     Prepare the Python bridge for a project. Called by add_vhdl_builtins(python=True).
 
@@ -136,7 +136,7 @@ def _python_context(vunit_context_file: Path) -> str:
     return text.replace(marker, "  use vunit_lib.python_pkg.all;\n" + marker, 1)
 
 
-def _write_if_changed(path: Path, text: str):
+def _write_if_changed(path: Path, text: str) -> None:
     """
     Write a file unless it already has the given content, keeping timestamps stable.
     """

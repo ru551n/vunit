@@ -45,8 +45,8 @@ package body python_pkg is
     return 'X';
   end;
 
-  -- Elements from left to right, independent of the range direction
-  function logic_image(value : std_ulogic_vector) return string is
+  -- The characters of the elements from left to right, independent of the range direction
+  function to_characters(value : std_ulogic_vector) return string is
     alias normalized : std_ulogic_vector(1 to value'length) is value;
     variable result : string(1 to value'length);
   begin
@@ -56,7 +56,8 @@ package body python_pkg is
     return result;
   end;
 
-  function to_logic(value : string) return std_ulogic_vector is
+  -- The elements of the characters, the first character becoming the leftmost element
+  function to_std_ulogic_vector(value : string) return std_ulogic_vector is
     alias normalized : string(1 to value'length) is value;
     variable result : std_ulogic_vector(value'length - 1 downto 0);
   begin
@@ -171,7 +172,10 @@ package body python_pkg is
     return succeeded(send_string(string(session)), operation) and succeeded(vpy_begin, operation);
   end;
 
-  procedure python_execute(source : string := ""; file_name : string := ""; session : python_session_t := default_session) is
+  procedure python_execute(
+    source    : string           := "";
+    file_name : string           := "";
+    session   : python_session_t := default_session) is
     function operation return string is
     begin
       if file_name /= "" and session /= default_session then
@@ -250,18 +254,18 @@ package body python_pkg is
 
   impure function push_arg(operation : string; arg : std_ulogic_vector) return boolean is
   begin
-    return push_arg(operation, logic_image(arg));
+    return push_arg(operation, to_characters(arg));
   end;
 
   impure function push_arg(operation : string; arg : signed) return boolean is
   begin
-    return succeeded(send_string(logic_image(std_ulogic_vector(arg))), operation)
+    return succeeded(send_string(to_characters(std_ulogic_vector(arg))), operation)
       and succeeded(vpy_push_bits(1), operation);
   end;
 
   impure function push_arg(operation : string; arg : unsigned) return boolean is
   begin
-    return succeeded(send_string(logic_image(std_ulogic_vector(arg))), operation)
+    return succeeded(send_string(to_characters(std_ulogic_vector(arg))), operation)
       and succeeded(vpy_push_bits(0), operation);
   end;
 
@@ -441,7 +445,7 @@ package body python_pkg is
   impure function get_result(function_name : string; session : python_session_t) return std_ulogic is
   begin
     if convert_result(function_name, session, kind_std_ulogic) then
-      return to_logic(result_string)(0);
+      return to_std_ulogic_vector(result_string)(0);
     end if;
     return 'U';
   end;
@@ -449,7 +453,7 @@ package body python_pkg is
   impure function get_result(function_name : string; session : python_session_t) return std_ulogic_vector is
   begin
     if convert_result(function_name, session, kind_std_ulogic_vector) then
-      return to_logic(result_string);
+      return to_std_ulogic_vector(result_string);
     end if;
     return "";
   end;
@@ -465,28 +469,31 @@ package body python_pkg is
   procedure get_result(function_name : string; session : python_session_t; result : out std_ulogic_vector) is
   begin
     if convert_result(function_name, session, kind_std_ulogic_vector, result'length) then
-      result := to_logic(result_string);
+      result := to_std_ulogic_vector(result_string);
     end if;
   end;
 
   procedure get_result(function_name : string; session : python_session_t; result : out signed) is
   begin
     if convert_result(function_name, session, kind_signed, result'length) then
-      result := signed(to_logic(result_string));
+      result := signed(to_std_ulogic_vector(result_string));
     end if;
   end;
 
   procedure get_result(function_name : string; session : python_session_t; result : out unsigned) is
   begin
     if convert_result(function_name, session, kind_unsigned, result'length) then
-      result := unsigned(to_logic(result_string));
+      result := unsigned(to_std_ulogic_vector(result_string));
     end if;
   end;
 
   -----------------------------------------------------------------------------
   -- python_call
   -----------------------------------------------------------------------------
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -495,7 +502,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -504,7 +515,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -513,7 +528,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -522,7 +541,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -531,7 +554,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -540,7 +567,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -549,7 +580,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -558,7 +593,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -567,7 +606,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -576,7 +619,11 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer is
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -585,7 +632,10 @@ package body python_pkg is
     return integer'low;
   end;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -594,7 +644,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -603,7 +657,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -612,7 +670,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -621,7 +683,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -630,7 +696,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -639,7 +709,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -648,7 +722,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -657,7 +735,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -666,7 +748,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -675,7 +761,11 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real is
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -684,7 +774,10 @@ package body python_pkg is
     return 0.0;
   end;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -693,7 +786,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -702,7 +799,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -711,7 +812,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -720,7 +825,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -729,7 +838,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -738,7 +851,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -747,7 +864,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -756,7 +877,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -765,7 +890,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -774,7 +903,11 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean is
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -783,7 +916,10 @@ package body python_pkg is
     return false;
   end;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -792,7 +928,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -801,7 +941,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -810,7 +954,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -819,7 +967,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -828,7 +980,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -837,7 +993,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -846,7 +1006,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -855,7 +1019,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -864,7 +1032,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -873,7 +1045,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string is
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -882,7 +1058,10 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -891,7 +1070,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -900,7 +1083,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -909,7 +1096,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -918,7 +1109,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -927,7 +1122,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -936,7 +1135,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -945,7 +1148,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -954,7 +1161,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -963,7 +1174,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -972,7 +1187,11 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic is
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -981,7 +1200,10 @@ package body python_pkg is
     return 'U';
   end;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -990,7 +1212,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -999,7 +1225,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1008,7 +1238,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1017,7 +1251,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1026,7 +1264,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1035,7 +1277,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1044,7 +1290,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1053,7 +1303,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1062,7 +1316,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1071,7 +1329,11 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector is
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1080,7 +1342,10 @@ package body python_pkg is
     return "";
   end;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1089,7 +1354,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1098,7 +1367,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1107,7 +1380,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1116,7 +1393,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1125,7 +1406,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1134,7 +1419,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1143,7 +1432,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1152,7 +1445,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1161,7 +1458,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1170,7 +1471,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t is
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1179,7 +1484,11 @@ package body python_pkg is
     return null_integer_array;
   end;
 
-  procedure python_call(function_name : string; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1187,7 +1496,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : integer;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1195,7 +1509,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : real; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : real;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1203,7 +1522,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : boolean; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : boolean;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1211,7 +1535,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : string; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : string;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1219,7 +1548,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1227,7 +1561,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1235,7 +1574,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : signed; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : signed;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1243,7 +1587,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : unsigned; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : unsigned;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1251,7 +1600,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer_array_t; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1259,7 +1613,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1267,7 +1626,11 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1275,7 +1638,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : integer;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1283,7 +1651,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : real; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : real;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1291,7 +1664,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : boolean; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : boolean;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1299,7 +1677,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : string; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : string;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1307,7 +1690,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1315,7 +1703,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1323,7 +1716,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : signed; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : signed;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1331,7 +1729,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : unsigned; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : unsigned;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1339,7 +1742,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer_array_t; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1347,7 +1755,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1355,7 +1768,11 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1363,7 +1780,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : integer;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1371,7 +1793,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : real; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : real;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1379,7 +1806,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : boolean; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : boolean;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1387,7 +1819,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : string; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : string;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1395,7 +1832,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1403,7 +1845,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1411,7 +1858,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : signed; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : signed;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1419,7 +1871,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : unsigned; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : unsigned;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1427,7 +1884,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; arg : integer_array_t; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), arg)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -1435,7 +1897,12 @@ package body python_pkg is
     end if;
   end;
 
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") is
+  procedure python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") is
   begin
     if begin_call(function_name, session) and push_arg(call_context(function_name, session), args)
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then

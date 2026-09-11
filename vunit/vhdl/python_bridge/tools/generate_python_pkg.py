@@ -57,8 +57,9 @@ FUNCTION_RESULTS = [
 PROCEDURE_RESULTS = ["std_ulogic_vector", "signed", "unsigned"]
 
 
-SESSION = "session : python_session_t := default_session"
-KWARGS = 'kwargs : python_kwargs_t := ""'
+# Parameters as (name, type, default) like the VHDL declarations they become
+SESSION = ("session", "python_session_t", "default_session")
+KWARGS = ("kwargs", "python_kwargs_t", '""')
 
 # Types of keyword argument values created with kw()
 KEYWORD_VALUES = [
@@ -75,10 +76,25 @@ KEYWORD_VALUES = [
 
 
 def _profile(argument):
-    params = ["function_name : string"]
+    params = [("function_name", "string", None)]
     if argument is not None:
-        params.append(f"{argument[1]} : {argument[0]}")
+        params.append((argument[1], argument[0], None))
     return params
+
+
+def _declaration(subprogram, params, suffix):
+    """
+    A declaration with one parameter per line and aligned types and defaults,
+    like the other generated VUnit packages.
+    """
+    name_width = max(len(name) for name, _, _ in params)
+    type_width = max(len(type_name) for _, type_name, default in params if default is not None)
+    lines = [f"  {subprogram}("]
+    for index, (name, type_name, default) in enumerate(params):
+        value = "" if default is None else f"{type_name.ljust(type_width)} := {default}"
+        terminator = ";" if index < len(params) - 1 else f"){suffix}"
+        lines.append(f"    {name.ljust(name_width)} : {value or type_name}{terminator}")
+    return "\n".join(lines)
 
 
 def _push(argument):
@@ -95,12 +111,12 @@ def generate_spec():
     for result, _ in FUNCTION_RESULTS:
         for argument in ARGUMENTS:
             params = _profile(argument) + [SESSION, KWARGS]
-            declarations.append(f"  impure function python_call({'; '.join(params)}) return {result};")
+            declarations.append(_declaration("impure function python_call", params, f" return {result};"))
         declarations.append("")
     for result in PROCEDURE_RESULTS:
         for argument in ARGUMENTS:
-            params = _profile(argument) + [f"result : out {result}", SESSION, KWARGS]
-            declarations.append(f"  procedure python_call({'; '.join(params)});")
+            params = _profile(argument) + [("result", f"out {result}", None), SESSION, KWARGS]
+            declarations.append(_declaration("procedure python_call", params, ";"))
         declarations.append("")
 
     return Template(
@@ -142,7 +158,10 @@ $keyword_declarations
 
   -- Execute Python source code (source) or a Python file (file_name). Relative
   -- file names are relative to the directory of the VUnit run script.
-  procedure python_execute(source : string := ""; file_name : string := ""; session : python_session_t := default_session);
+  procedure python_execute(
+    source    : string           := "";
+    file_name : string           := "";
+    session   : python_session_t := default_session);
 
 $declarations
 end package;
@@ -166,7 +185,7 @@ def generate_body():
             params = _profile(argument) + [SESSION, KWARGS]
             overloads.append(
                 f"""\
-  impure function python_call({'; '.join(params)}) return {result} is
+{_declaration("impure function python_call", params, f" return {result} is")}
   begin
     if begin_call(function_name, session){_push(argument)}
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
@@ -178,10 +197,10 @@ def generate_body():
             )
     for result in PROCEDURE_RESULTS:
         for argument in ARGUMENTS:
-            params = _profile(argument) + [f"result : out {result}", SESSION, KWARGS]
+            params = _profile(argument) + [("result", f"out {result}", None), SESSION, KWARGS]
             overloads.append(
                 f"""\
-  procedure python_call({'; '.join(params)}) is
+{_declaration("procedure python_call", params, " is")}
   begin
     if begin_call(function_name, session){_push(argument)}
       and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then

@@ -65,7 +65,7 @@ static int load_python_library(void) {
   HMODULE module;
 
   if (wpath == NULL) {
-    vpy_set_error("Invalid Python DLL path in the VUnit Python bridge configuration");
+    vpy_set_error("Invalid Python DLL path in the Python bridge configuration");
     return VPY_ERROR;
   }
   module = LoadLibraryExW(wpath, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
@@ -106,7 +106,7 @@ static int set_config_string(PyConfig *config, wchar_t **field, const char *valu
   wchar_t *wvalue = to_wide(value);
 
   if (wvalue == NULL) {
-    vpy_set_error("Invalid path in the VUnit Python bridge configuration");
+    vpy_set_error("Invalid path in the Python bridge configuration");
     return VPY_ERROR;
   }
   status = PyConfig_SetString(config, field, wvalue);
@@ -190,7 +190,7 @@ static int create_runtime(void) {
 
   g_runtime = PyDict_GetItemString(globals, "runtime"); /* borrowed */
   if (g_runtime == NULL) {
-    vpy_set_error("Failed to create the VUnit Python runtime");
+    vpy_set_error("Failed to create the Python bridge runtime");
     goto done;
   }
   Py_INCREF(g_runtime);
@@ -254,7 +254,7 @@ int vpy_initialize(void) {
 int vpy_enter(PyGILState_STATE *gil) {
   if (g_state != STATE_READY) {
     if (!vpy_has_error()) {
-      vpy_set_error("Internal error: VUnit Python bridge is not initialized");
+      vpy_set_error("Internal error: the Python bridge is not initialized");
     }
     return VPY_ERROR;
   }
