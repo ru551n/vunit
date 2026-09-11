@@ -4,6 +4,10 @@
 --
 -- Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
 library vunit_lib;
 context vunit_lib.vunit_context;
 use vunit_lib.python_pkg.all;
@@ -36,6 +40,20 @@ begin
         );
         check_equal(integer'(python_call("double", 21)), 42);
         check_equal(integer'(python_call("double", -5)), -10);
+
+      elsif run("+ joins source lines") then
+        check_equal(string'("a" + "b"), "a" & LF & "b");
+        check_equal(string'("a" + "" + "b"), "a" & LF & LF & "b");
+        python_execute(
+          "def triple(x):" +
+          "" +
+          "    return x * 3"
+        );
+        check_equal(integer'(python_call("triple", 14)), 42);
+
+      elsif run("+ on strings does not disturb numeric_std arithmetic") then
+        check_equal(to_integer(unsigned'("0011") + "0001"), 4);
+        check_equal(to_integer(signed'("1110") + signed'("0001")), -1);
 
       elsif run("persistent namespace across execute and call") then
         python_execute(source => "COUNTER = 0");

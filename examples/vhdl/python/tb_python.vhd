@@ -41,11 +41,12 @@ begin
 
     while test_suite loop
       if run("Test inline Python") then
+        -- "+" joins lines of Python source
         python_execute(
-          "def fibonacci(n):" & LF &
-          "    a, b = 0, 1" & LF &
-          "    for _ in range(n):" & LF &
-          "        a, b = b, a + b" & LF &
+          "def fibonacci(n):" +
+          "    a, b = 0, 1" +
+          "    for _ in range(n):" +
+          "        a, b = b, a + b" +
           "    return a"
         );
         answer := python_call("fibonacci", 10);

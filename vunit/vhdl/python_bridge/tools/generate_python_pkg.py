@@ -116,6 +116,10 @@ package python_pkg is
   type python_session_t is array (positive range <>) of character;
   constant default_session : python_session_t := "default";
 
+  -- Join lines of Python source code: "a" + "b" is "a" & LF & "b", e.g.
+  -- python_execute("def f(x):" + "    return x + 1");
+  function "+"(left, right : string) return string;
+
   -- Execute Python source code (source) or a Python file (file_name). Relative
   -- file names are relative to the directory of the VUnit run script.
   procedure python_execute(source : string := ""; file_name : string := ""; session : python_session_t := default_session);
