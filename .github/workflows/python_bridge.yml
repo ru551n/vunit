@@ -77,8 +77,6 @@ jobs:
     name: '🐧 Ubuntu · Python ${{ matrix.py }} · ${{ matrix.sim }} ${{ matrix.backend }}'
     env:
       VUNIT_SIMULATOR: ${{ matrix.sim }}
-      VENV: ${{ runner.temp }}/venv with space
-      OUT: ${{ runner.temp }}/out dir
     steps:
 
     - name: '🧰 Checkout'
@@ -105,20 +103,20 @@ jobs:
 
     - name: '🐍 Install VUnit and NumPy in a virtual environment'
       run: |
-        python -m venv "$VENV"
-        "$VENV/bin/python" -m pip install numpy -e . --progress-bar off
+        python -m venv "$RUNNER_TEMP/venv with space"
+        "$RUNNER_TEMP/venv with space/bin/python" -m pip install numpy -e . --progress-bar off
 
     - name: '🚧 Feature tests'
-      run: '"$VENV/bin/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$OUT"'
+      run: '"$RUNNER_TEMP/venv with space/bin/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$RUNNER_TEMP/out dir"'
 
     - name: '🚧 Feature tests with cached bridge'
       run: |
-        before="$(ls -l --time-style=full-iso "$OUT"/python_bridge/*/libvunit_python_bridge.so)"
-        "$VENV/bin/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$OUT"
-        test "$before" = "$(ls -l --time-style=full-iso "$OUT"/python_bridge/*/libvunit_python_bridge.so)"
+        before="$(ls -l --time-style=full-iso "$RUNNER_TEMP/out dir"/python_bridge/*/libvunit_python_bridge.so)"
+        "$RUNNER_TEMP/venv with space/bin/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$RUNNER_TEMP/out dir"
+        test "$before" = "$(ls -l --time-style=full-iso "$RUNNER_TEMP/out dir"/python_bridge/*/libvunit_python_bridge.so)"
 
     - name: '🚧 Example'
-      run: '"$VENV/bin/python" examples/vhdl/python/run.py -p 4'
+      run: '"$RUNNER_TEMP/venv with space/bin/python" examples/vhdl/python/run.py -p 4'
 
 #
 # Windows, prebuilt MSVC DLLs
@@ -138,8 +136,6 @@ jobs:
     name: '🟦 Windows · Python ${{ matrix.py }} · ${{ matrix.sim }}'
     env:
       VUNIT_SIMULATOR: ${{ matrix.sim }}
-      VENV: ${{ runner.temp }}/venv with space
-      OUT: ${{ runner.temp }}/out dir
     steps:
 
     - name: '🧰 Checkout'
@@ -176,16 +172,16 @@ jobs:
 
     - name: '🐍 Install VUnit and NumPy in a virtual environment'
       run: |
-        python -m venv "$VENV"
-        "$VENV/Scripts/python" -m pip install numpy -e . --progress-bar off
+        python -m venv "$RUNNER_TEMP/venv with space"
+        "$RUNNER_TEMP/venv with space/Scripts/python" -m pip install numpy -e . --progress-bar off
 
     - name: '🚧 Feature tests (no compiler on PATH)'
       run: |
         ! command -v cl
-        "$VENV/Scripts/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$OUT"
+        "$RUNNER_TEMP/venv with space/Scripts/python" vunit/vhdl/python_bridge/run.py -p 4 -o "$RUNNER_TEMP/out dir"
 
     - name: '🚧 Example'
-      run: '"$VENV/Scripts/python" examples/vhdl/python/run.py -p 4'
+      run: '"$RUNNER_TEMP/venv with space/Scripts/python" examples/vhdl/python/run.py -p 4'
 
 #
 # Packaging, sources and DLLs included, no Linux binaries
