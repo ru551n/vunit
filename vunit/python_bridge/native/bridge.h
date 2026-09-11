@@ -1,0 +1,114 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
+ *
+ * Internal header of the native bridge between VHDL (NVC/GHDL VHPIDIRECT) and
+ * an embedded CPython interpreter. The bridge is a private implementation
+ * detail of python_pkg; the only public VHDL operations are python_execute
+ * and python_call.
+ *
+ * Modules:
+ *   error.c        error text reported to VHDL
+ *   config.c       configuration file written by VUnit next to the library
+ *   interpreter.c  starting the interpreter and loading ../runtime.py
+ *   arguments.c    strings and arguments transferred from VHDL
+ *   operations.c   execute, call and results transferred back to VHDL
+ *
+ * ABI rules, chosen to be identical for NVC and GHDL on all platforms:
+ *   - VHDL integer <-> int32_t, VHDL real <-> double.
+ *   - Booleans are passed as integers (0/1), never as VHDL boolean.
+ *   - Strings and integer vectors only cross the boundary as *constrained*
+ *     chunks (plain pointers) with explicit offsets/lengths. Unconstrained
+ *     arrays (fat pointers) are simulator specific and are never used.
+ *   - Every operation that can fail returns a status (VPY_OK or VPY_ERROR).
+ *     The error text is retrieved with vpy_error_length/vpy_error_read.
+ *
+ * Python objects are only touched with the GIL held. Python data symbols
+ * (e.g. Py_None) must not be used: the Windows DLL delay-loads the Python
+ * DLL, which only supports functions.
+ */
+
+#ifndef VUNIT_PYTHON_BRIDGE_H
+#define VUNIT_PYTHON_BRIDGE_H
+
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef Py_GIL_DISABLED
+#error "The VUnit Python bridge does not support free-threaded CPython builds"
+#endif
+
+#ifdef _WIN32
+#define VPY_EXPORT __declspec(dllexport)
+#else
+#define VPY_EXPORT __attribute__((visibility("default")))
+#endif
+
+#define VPY_OK 0
+#define VPY_ERROR 1
+
+/*
+ * Entry points called from VHDL (declared in python_ffi_pkg.vhd.in). Strings
+ * are transferred through a buffer, arguments are pushed before vpy_call.
+ */
+VPY_EXPORT int32_t vpy_buffer_clear(void);
+VPY_EXPORT int32_t vpy_buffer_append(const char *chunk, int32_t length);
+VPY_EXPORT int32_t vpy_begin(void);
+VPY_EXPORT int32_t vpy_push_string(void);
+VPY_EXPORT int32_t vpy_push_integer(int32_t value);
+VPY_EXPORT int32_t vpy_push_real(double value);
+VPY_EXPORT int32_t vpy_push_boolean(int32_t value);
+VPY_EXPORT int32_t vpy_push_bits(int32_t is_signed);
+VPY_EXPORT int32_t vpy_push_array(int32_t length, int32_t width, int32_t height, int32_t depth, int32_t bit_width,
+                                  int32_t is_signed);
+VPY_EXPORT int32_t vpy_array_write(const int32_t *chunk, int32_t length);
+VPY_EXPORT int32_t vpy_execute(int32_t is_file);
+VPY_EXPORT int32_t vpy_call(void);
+VPY_EXPORT int32_t vpy_result(int32_t kind, int32_t width);
+VPY_EXPORT int32_t vpy_result_integer(void);
+VPY_EXPORT double vpy_result_real(void);
+VPY_EXPORT int32_t vpy_result_meta(int32_t index);
+VPY_EXPORT void vpy_result_read_string(char *chunk, int32_t offset, int32_t length);
+VPY_EXPORT void vpy_result_read_integers(int32_t *chunk, int32_t offset, int32_t length);
+VPY_EXPORT int32_t vpy_error_length(void);
+VPY_EXPORT void vpy_error_read(char *chunk, int32_t offset, int32_t length);
+
+/* Internal functions shared between the modules */
+
+/* error.c */
+void vpy_set_error(const char *text);
+void vpy_set_error_bytes(const char *text, size_t length);
+void vpy_set_error2(const char *prefix, const char *detail);
+void vpy_set_error_from_python(void); /* GIL held */
+int vpy_has_error(void);
+
+/* config.c */
+typedef struct {
+  char *executable; /* sys.executable of the Python running VUnit */
+  char *prefix;     /* its sys.prefix, verified by the runtime */
+  char *runtime;    /* path of runtime.py */
+  char *base_dir;   /* base of relative Python file names */
+  char *python_dll; /* Windows only: path of the Python DLL */
+} vpy_config_t;
+
+int vpy_read_config(vpy_config_t *config);
+
+/* interpreter.c */
+int vpy_initialize(void);
+PyObject *vpy_runtime(void); /* borrowed, NULL before initialization */
+int vpy_enter(PyGILState_STATE *gil);
+int vpy_finish_call(PyObject *ret); /* GIL held, steals ret */
+
+/* arguments.c (GIL held) */
+PyObject *vpy_buffer_as_str(void);
+int vpy_reset_arguments(void);
+PyObject *vpy_arguments(void); /* borrowed */
+void vpy_clear_arguments(void);
+
+#endif

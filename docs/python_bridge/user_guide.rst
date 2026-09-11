@@ -295,7 +295,7 @@ How it works
 ------------
 
 The interpreter is embedded in the simulator process by a small C library
-(``vunit/python_bridge/native/vunit_python_bridge.c``) called through VHPIDIRECT.
+(``vunit/python_bridge/native``) called through VHPIDIRECT.
 The interpreter is started on first use, is never restarted within a
 simulation, and uses no signal handlers of its own.
 

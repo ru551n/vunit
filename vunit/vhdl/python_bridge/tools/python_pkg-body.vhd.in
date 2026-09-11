@@ -8,7 +8,7 @@ use work.logger_pkg.all;
 use work.python_ffi_pkg.all;
 
 package body python_pkg is
-  -- Result kinds, must match vunit/python_bridge/native/vunit_python_bridge.c and runtime.py
+  -- Result kinds, must match vunit/python_bridge/runtime.py
   constant kind_integer : integer := 0;
   constant kind_real : integer := 1;
   constant kind_boolean : integer := 2;

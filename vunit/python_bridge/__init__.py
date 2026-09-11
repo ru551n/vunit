@@ -8,7 +8,7 @@
 """
 VHDL-to-Python bridge enabled by ``add_vhdl_builtins(python=True)``.
 
-The bridge is a small C library (native/vunit_python_bridge.c) that embeds
+The bridge is a small C library (native/*.c) that embeds
 CPython in the simulator process and is called from VHDL through VHPIDIRECT
 foreign subprograms. Modules:
 

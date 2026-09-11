@@ -21,10 +21,11 @@ import subprocess
 import sys
 import sysconfig
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 PACKAGE_PATH = Path(__file__).parent.resolve()
-BRIDGE_SOURCE = PACKAGE_PATH / "native" / "vunit_python_bridge.c"
+# C sources of the bridge library
+NATIVE_PATH = PACKAGE_PATH / "native"
 # Prebuilt Windows DLLs, included in releases
 BINARY_PATH = PACKAGE_PATH / "bin"
 
@@ -179,6 +180,23 @@ def _compiler() -> List[str]:
     )
 
 
+def bridge_sources(native_path: Optional[Path] = None) -> List[Path]:
+    """
+    The C source files of the bridge library.
+    """
+    return sorted((NATIVE_PATH if native_path is None else native_path).glob("*.c"))
+
+
+def _source_fingerprint() -> str:
+    """
+    Hash of all bridge sources and headers.
+    """
+    digest = hashlib.sha256()
+    for path in sorted(NATIVE_PATH.glob("*.[ch]")):
+        digest.update(path.name.encode("utf-8") + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
 def _prepare_posix_library(root: Path) -> Path:
     """
     Compile the bridge for the running Python, reusing a cached build when possible.
@@ -186,9 +204,8 @@ def _prepare_posix_library(root: Path) -> Path:
     python_library = _python_library()
     include_dirs = _include_dirs()
 
-    source = BRIDGE_SOURCE.read_bytes()
     key_items = [
-        hashlib.sha256(source).hexdigest(),
+        _source_fingerprint(),
         sys.platform,
         platform.machine(),
         " ".join(platform.libc_ver()),
@@ -212,7 +229,8 @@ def _prepare_posix_library(root: Path) -> Path:
         compiler
         + ["-shared", "-fPIC", "-O2", "-fvisibility=hidden"]
         + [f"-I{path}" for path in include_dirs]
-        + [str(BRIDGE_SOURCE), "-o", str(tmp)]
+        + [str(path) for path in bridge_sources()]
+        + ["-o", str(tmp)]
         + [str(python_library), f"-Wl,-rpath,{python_library.parent!s}", "-Wl,-soname,libvunit_python_bridge.so"]
         + (["-ldl"] if sys.platform.startswith("linux") else [])
     )
