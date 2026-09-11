@@ -50,125 +50,591 @@ package python_pkg is
 
   -- Execute Python source code (source) or a Python file (file_name). Relative
   -- file names are relative to the directory of the VUnit run script.
-  procedure python_execute(source : string := ""; file_name : string := ""; session : python_session_t := default_session);
+  procedure python_execute(
+    source    : string           := "";
+    file_name : string           := "";
+    session   : python_session_t := default_session);
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer;
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return real;
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return real;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return boolean;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return string;
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return string;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return std_ulogic_vector;
 
-  impure function python_call(function_name : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : integer; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : real; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : boolean; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : string; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : std_ulogic; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; arg : integer_array_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
-  impure function python_call(function_name : string; args : integer_array_vec_t; session : python_session_t := default_session; kwargs : python_kwargs_t := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : integer;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : real;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : boolean;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : string;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
+  impure function python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "") return integer_array_t;
 
-  procedure python_call(function_name : string; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : integer; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : real; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : boolean; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : string; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : std_ulogic; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : signed; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : unsigned; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : integer_array_t; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out std_ulogic_vector; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
+  procedure python_call(
+    function_name : string;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : integer;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : real;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : boolean;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : string;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : signed;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : unsigned;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    result        : out std_ulogic_vector;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
 
-  procedure python_call(function_name : string; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : integer; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : real; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : boolean; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : string; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : std_ulogic; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : signed; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : unsigned; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : integer_array_t; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out signed; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
+  procedure python_call(
+    function_name : string;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : integer;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : real;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : boolean;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : string;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : signed;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : unsigned;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    result        : out signed;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
 
-  procedure python_call(function_name : string; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : integer; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : real; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : boolean; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : string; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : std_ulogic; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : std_ulogic_vector; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : signed; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : unsigned; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; arg : integer_array_t; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
-  procedure python_call(function_name : string; args : integer_array_vec_t; result : out unsigned; session : python_session_t := default_session; kwargs : python_kwargs_t := "");
+  procedure python_call(
+    function_name : string;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : integer;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : real;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : boolean;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : string;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : std_ulogic_vector;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : signed;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : unsigned;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    arg           : integer_array_t;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
+  procedure python_call(
+    function_name : string;
+    args          : integer_array_vec_t;
+    result        : out unsigned;
+    session       : python_session_t := default_session;
+    kwargs        : python_kwargs_t  := "");
 end package;

@@ -509,7 +509,7 @@ class TestWindowsDllSelection(unittest.TestCase):
                 mock.patch("vunit.python_bridge.native_library.sysconfig.get_platform", return_value="win-amd64"),
                 mock.patch("subprocess.run") as run_mock,
             ):
-                with self.assertRaisesRegex(RuntimeError, "No prebuilt VUnit Python bridge DLL"):
+                with self.assertRaisesRegex(RuntimeError, "No prebuilt Python bridge DLL"):
                     native_library._prepare_windows_library(root)  # pylint: disable=protected-access
             run_mock.assert_not_called()
 

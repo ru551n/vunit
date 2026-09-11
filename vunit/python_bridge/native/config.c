@@ -108,7 +108,7 @@ static FILE *open_config_file(void) {
   FILE *file;
 
   if (directory == NULL) {
-    vpy_set_error("Failed to determine the location of the VUnit Python bridge library");
+    vpy_set_error("Failed to determine the location of the Python bridge library");
     return NULL;
   }
   directory_length = strlen(directory);
@@ -125,7 +125,7 @@ static FILE *open_config_file(void) {
 
   file = open_utf8_path(path);
   if (file == NULL) {
-    vpy_set_error2("Failed to open VUnit Python bridge configuration file ", path);
+    vpy_set_error2("Failed to open the Python bridge configuration file ", path);
   }
   free(path);
   return file;
@@ -186,12 +186,12 @@ int vpy_read_config(vpy_config_t *config) {
   fclose(file);
 
   if (config->executable == NULL || config->prefix == NULL || config->runtime == NULL || config->base_dir == NULL) {
-    vpy_set_error("Incomplete VUnit Python bridge configuration file");
+    vpy_set_error("Incomplete Python bridge configuration file");
     return VPY_ERROR;
   }
 #ifdef _WIN32
   if (config->python_dll == NULL) {
-    vpy_set_error("VUnit Python bridge configuration file lacks the Python DLL path");
+    vpy_set_error("The Python bridge configuration file lacks the Python DLL path");
     return VPY_ERROR;
   }
 #endif

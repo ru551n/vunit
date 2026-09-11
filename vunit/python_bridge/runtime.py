@@ -5,7 +5,7 @@
 # Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 
 """
-Runtime of the VUnit Python bridge.
+Runtime of the Python bridge.
 
 This module is executed *inside the simulator process* by the embedded
 interpreter of the native bridge (native/*.c). It is loaded by file

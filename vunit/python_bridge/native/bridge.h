@@ -41,7 +41,7 @@
 #include <stdint.h>
 
 #ifdef Py_GIL_DISABLED
-#error "The VUnit Python bridge does not support free-threaded CPython builds"
+#error "VHDL Python support does not work with free-threaded CPython builds"
 #endif
 
 #ifdef _WIN32
