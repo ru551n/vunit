@@ -152,6 +152,11 @@ package body python_pkg is
   -----------------------------------------------------------------------------
   -- python_execute
   -----------------------------------------------------------------------------
+  function "+"(left, right : string) return string is
+  begin
+    return left & LF & right;
+  end;
+
   function session_context(session : python_session_t) return string is
   begin
     if session = default_session then

@@ -73,18 +73,22 @@ whether inline or from files. Separate namespaces can be created with
     python_execute("GAIN = 4");
 
     python_execute(
-      "import numpy as np" & LF &
-      "" & LF &
-      "def scale(x):" & LF &
+      "import numpy as np" +
+      "" +
+      "def scale(x):" +
       "    return x * GAIN"
     );
 
     python_execute(file_name => "models/reference_model.py");
 
-Source code is passed as a string. Multiple lines are joined with ``LF`` and
-indentation is preserved exactly. VHDL cannot express an aggregate of strings
-of different lengths, so ``python_execute(("line 1", "line 2"))`` is not
-possible.
+Source code is passed as a string. Lines are joined with the ``+`` operator
+that ``python_pkg`` defines for strings: ``"a" + "b"`` is ``"a" & LF & "b"``.
+Indentation and blank lines (``""``) are preserved exactly. VHDL cannot
+express an aggregate of strings of different lengths, so
+``python_execute(("line 1", "line 2"))`` is not possible.
+
+``+`` only applies where a ``string`` is expected; ``numeric_std`` arithmetic
+such as ``unsigned'("0011") + "0001"`` is unaffected.
 
 A Python file is executed with the equivalent of
 
