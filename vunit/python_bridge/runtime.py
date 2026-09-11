@@ -8,7 +8,7 @@
 Runtime of the VUnit Python bridge.
 
 This module is executed *inside the simulator process* by the embedded
-interpreter of the native bridge (vunit_python_bridge.c). It is loaded by file
+interpreter of the native bridge (native/*.c). It is loaded by file
 path, not imported from the vunit package, and must therefore not import
 anything from vunit. It is a private implementation detail of the VHDL
 python_execute/python_call operations.
@@ -24,7 +24,7 @@ import traceback
 from pathlib import Path
 import __main__
 
-# Result kinds, must match vunit_python_bridge.c and python_pkg
+# Result kinds, must match python_pkg
 KIND_INTEGER = 0
 KIND_REAL = 1
 KIND_BOOLEAN = 2

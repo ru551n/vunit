@@ -12,6 +12,7 @@ library with the system C compiler, and reading/writing files, is fine.
 """
 
 import os
+import shutil
 import re
 import sys
 import unittest
@@ -314,11 +315,12 @@ class TestPosixBuildAndCache(unittest.TestCase):
     def test_changed_source_gets_new_cache_dir_and_recompiles(self):
         first = self._setup()
 
-        modified_source = self.tempdir / "modified_vunit_python_bridge.c"
-        original_text = native_library.BRIDGE_SOURCE.read_text(encoding="utf-8")
-        modified_source.write_text(original_text + "\n/* test tweak */\n", encoding="utf-8")
+        modified_native = self.tempdir / "native"
+        shutil.copytree(native_library.NATIVE_PATH, modified_native)
+        with (modified_native / "error.c").open("a", encoding="utf-8") as fptr:
+            fptr.write("\n/* test tweak */\n")
 
-        with mock.patch("vunit.python_bridge.native_library.BRIDGE_SOURCE", modified_source):
+        with mock.patch("vunit.python_bridge.native_library.NATIVE_PATH", modified_native):
             second = self._setup()
 
         self.assertNotEqual(first.library_file.parent, second.library_file.parent)

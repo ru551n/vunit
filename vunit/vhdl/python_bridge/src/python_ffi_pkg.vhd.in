@@ -4,7 +4,7 @@
 --
 -- Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 --
--- PRIVATE foreign subprograms of the VUnit Python bridge (vunit_python_bridge.c).
+-- PRIVATE foreign subprograms of the VUnit Python bridge (vunit/python_bridge/native).
 --
 -- This file is a template. VUnit substitutes the library token with the name
 -- the simulator uses to find the bridge library and compiles the result into

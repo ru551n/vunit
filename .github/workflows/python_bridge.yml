@@ -217,7 +217,7 @@ jobs:
     - name: '🔍 Check sdist content'
       run: |
         tar tzf dist/*.tar.gz > content.txt
-        for file in python_bridge/bridge.py python_bridge/runtime.py python_bridge/native/vunit_python_bridge.c \
+        for file in python_bridge/bridge.py python_bridge/runtime.py python_bridge/native/bridge.h python_bridge/native/interpreter.c \
                     vhdl/python_bridge/src/python_ffi_pkg.vhd.in vhdl/python_bridge/src/python_pkg.vhd; do
           grep -q "vunit/$file\$" content.txt || { echo "missing $file"; exit 1; }
         done
