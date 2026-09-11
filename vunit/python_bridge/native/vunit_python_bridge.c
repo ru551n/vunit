@@ -696,10 +696,15 @@ VPY_EXPORT int32_t vpy_buffer_append(const char *chunk, int32_t length) {
   return VPY_OK;
 }
 
-/* Start a new operation: initialize on first use, reset arguments and result. */
+/*
+ * Start a new operation in the session named by the buffer: initialize on
+ * first use, select the session and reset arguments and result.
+ */
 VPY_EXPORT int32_t vpy_begin(void) {
   PyGILState_STATE gil;
-  int status = VPY_OK;
+  PyObject *session;
+  PyObject *ret = NULL;
+  int status = VPY_ERROR;
 
   if (initialize() != VPY_OK) {
     return VPY_ERROR;
@@ -709,11 +714,20 @@ VPY_EXPORT int32_t vpy_begin(void) {
   clear_result();
   clear_pending();
   Py_CLEAR(g_args);
-  g_args = PyList_New(0);
+  session = buffer_as_str();
+  if (session != NULL) {
+    ret = PyObject_CallMethod(g_runtime, "select_session", "O", session);
+    Py_DECREF(session);
+  }
+  if (ret != NULL) {
+    g_args = PyList_New(0);
+  }
   if (g_args == NULL) {
     set_error_from_python();
-    status = VPY_ERROR;
+  } else {
+    status = VPY_OK;
   }
+  Py_XDECREF(ret);
   PyGILState_Release(gil);
   return status;
 }
