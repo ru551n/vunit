@@ -142,9 +142,12 @@ class TestAddVhdlBuiltinsPython(unittest.TestCase):
             builtins.add_vhdl_builtins(python=True)
 
     def test_rejects_unsupported_simulator(self):
+        # Reported like other VUnit setup errors: logged, then exit code 1
         builtins = self._builtins(simulator=_autospec_simulator("modelsim"))
-        with self.assertRaisesRegex(RuntimeError, "NVC or GHDL|not supported for modelsim"):
+        with self.assertLogs("vunit.builtins", level="ERROR") as logs, self.assertRaises(SystemExit) as exit_:
             builtins.add_vhdl_builtins(python=True)
+        self.assertEqual(exit_.exception.code, 1)
+        self.assertRegex(logs.output[0], "requires NVC or GHDL.*not supported for modelsim")
 
     def test_adds_expected_files_instead_of_original_context(self):
         with create_tempdir() as tempdir:
