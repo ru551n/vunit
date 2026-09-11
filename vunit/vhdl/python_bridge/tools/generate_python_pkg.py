@@ -58,6 +58,20 @@ PROCEDURE_RESULTS = ["std_ulogic_vector", "signed", "unsigned"]
 
 
 SESSION = "session : python_session_t := default_session"
+KWARGS = 'kwargs : python_kwargs_t := ""'
+
+# Types of keyword argument values created with kw()
+KEYWORD_VALUES = [
+    "integer",
+    "real",
+    "boolean",
+    "string",
+    "std_ulogic",
+    "std_ulogic_vector",
+    "signed",
+    "unsigned",
+    "integer_array_t",
+]
 
 
 def _profile(argument):
@@ -70,7 +84,7 @@ def _profile(argument):
 def _push(argument):
     if argument is None:
         return ""
-    return f" and push_arg(function_name, {argument[1]})"
+    return f" and push_arg(call_context(function_name, session), {argument[1]})"
 
 
 def generate_spec():
@@ -80,12 +94,12 @@ def generate_spec():
     declarations = []
     for result, _ in FUNCTION_RESULTS:
         for argument in ARGUMENTS:
-            params = _profile(argument) + [SESSION]
+            params = _profile(argument) + [SESSION, KWARGS]
             declarations.append(f"  impure function python_call({'; '.join(params)}) return {result};")
         declarations.append("")
     for result in PROCEDURE_RESULTS:
         for argument in ARGUMENTS:
-            params = _profile(argument) + [f"result : out {result}", SESSION]
+            params = _profile(argument) + [f"result : out {result}", SESSION, KWARGS]
             declarations.append(f"  procedure python_call({'; '.join(params)});")
         declarations.append("")
 
@@ -116,6 +130,12 @@ package python_pkg is
   type python_session_t is array (positive range <>) of character;
   constant default_session : python_session_t := "default";
 
+  -- Keyword arguments of python_call, created with kw and joined with &, e.g.
+  -- python_call("model", input, kwargs => kw("gain", 4) & kw("mode", string'("fast")));
+  -- A kw value is transferred to Python when kw is evaluated.
+  type python_kwargs_t is array (positive range <>) of character;
+$keyword_declarations
+
   -- Join lines of Python source code: "a" + "b" is "a" & LF & "b", e.g.
   -- python_execute("def f(x):" + "    return x + 1");
   function "+"(left, right : string) return string;
@@ -127,7 +147,13 @@ package python_pkg is
 $declarations
 end package;
 """
-    ).substitute(license=LICENSE, declarations="\n".join(declarations).rstrip("\n"))
+    ).substitute(
+        license=LICENSE,
+        declarations="\n".join(declarations).rstrip("\n"),
+        keyword_declarations="\n".join(
+            f"  impure function kw(name : string; value : {value}) return python_kwargs_t;" for value in KEYWORD_VALUES
+        ),
+    )
 
 
 def generate_body():
@@ -137,12 +163,13 @@ def generate_body():
     overloads = []
     for result, failure_value in FUNCTION_RESULTS:
         for argument in ARGUMENTS:
-            params = _profile(argument) + [SESSION]
+            params = _profile(argument) + [SESSION, KWARGS]
             overloads.append(
                 f"""\
   impure function python_call({'; '.join(params)}) return {result} is
   begin
-    if begin_call(function_name, session){_push(argument)} and invoke(function_name, session) then
+    if begin_call(function_name, session){_push(argument)}
+      and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
       return get_result(function_name, session);
     end if;
     return {failure_value};
@@ -151,12 +178,13 @@ def generate_body():
             )
     for result in PROCEDURE_RESULTS:
         for argument in ARGUMENTS:
-            params = _profile(argument) + [f"result : out {result}", SESSION]
+            params = _profile(argument) + [f"result : out {result}", SESSION, KWARGS]
             overloads.append(
                 f"""\
   procedure python_call({'; '.join(params)}) is
   begin
-    if begin_call(function_name, session){_push(argument)} and invoke(function_name, session) then
+    if begin_call(function_name, session){_push(argument)}
+      and push_kwargs(function_name, session, kwargs) and invoke(function_name, session) then
       get_result(function_name, session, result);
     end if;
   end;
@@ -164,7 +192,20 @@ def generate_body():
             )
 
     return Template((Path(__file__).parent / "python_pkg-body.vhd.in").read_text(encoding="utf-8")).substitute(
-        license=LICENSE, overloads="\n".join(overloads).rstrip("\n")
+        license=LICENSE,
+        overloads="\n".join(overloads).rstrip("\n"),
+        keyword_functions="\n".join(
+            f"""\
+  impure function kw(name : string; value : {value}) return python_kwargs_t is
+  begin
+    if begin_operation(default_session, kw_context(name)) and push_arg(kw_context(name), value) then
+      return stage_keyword(name);
+    end if;
+    return "";
+  end;
+"""
+            for value in KEYWORD_VALUES
+        ).rstrip("\n"),
     )
 
 

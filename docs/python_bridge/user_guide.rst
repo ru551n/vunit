@@ -151,6 +151,34 @@ arguments, either concatenated with ``&`` or as an aggregate associated with
 the formal ``args``. A positional aggregate, ``python_call("f", (a, b))``, is
 ambiguous in VHDL and does not compile.
 
+Keyword arguments
+~~~~~~~~~~~~~~~~~
+
+Python keyword arguments are created with ``kw(name, value)`` and joined with
+``&``. The value can be of any of the argument types below, including
+``integer_array_t``. Keyword arguments are passed with the ``kwargs``
+parameter, which comes after ``session``, so it is normally given by name:
+
+.. code-block:: vhdl
+
+    result := python_call("model", input, kwargs => kw("gain", 4) & kw("mode", string'("fast")));
+    python_call("to_fixed", x, value, kwargs => kw("frac_bits", 8));
+
+Python receives ``model(input, gain=4, mode="fast")``. As for arguments, a
+string literal value must be qualified with ``string'``.
+
+``kw`` transfers its value to Python when it is evaluated, with the same
+exact conversions as a positional argument, and returns a small reference of
+type ``python_kwargs_t``. A ``python_kwargs_t`` value can therefore be kept in
+a constant and used in several calls. Each call receives a copy of an
+``integer_array_t`` value, so a function that modifies its argument in place
+does not affect later calls. Giving the same name twice, or a name that is
+not a valid Python identifier, is an error.
+
+Values created by ``kw`` are kept until the simulation ends. This is
+negligible for scalars, but avoid creating large ``integer_array_t`` keyword
+arguments in a long loop.
+
 Type mapping
 ~~~~~~~~~~~~
 
@@ -342,10 +370,9 @@ and 3.14.
 Limitations
 -----------
 
-* Only zero or one argument of the scalar types, or ``integer_array_t``
-  arguments, can be passed. Mixed argument lists are not supported. Pass
-  additional values through the namespace instead, for example with
-  ``python_execute("GAIN = " & to_string(gain))``.
+* Only zero or one positional argument of the scalar types, or any number of
+  ``integer_array_t`` positional arguments, can be passed. Further values of
+  any type can be passed as keyword arguments with ``kw``.
 * ``real_vector``, records and other composite types are not converted.
 * One interpreter per simulation. Sessions provide separate namespaces but
   share imported modules and all other interpreter state, see

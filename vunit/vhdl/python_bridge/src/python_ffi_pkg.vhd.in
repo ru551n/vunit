@@ -48,6 +48,15 @@ package python_ffi_pkg is
   impure function vpy_array_write(chunk : integer_chunk_t; length : integer) return integer;
   attribute foreign of vpy_array_write : function is "VHPIDIRECT {library} vpy_array_write";
 
+  impure function vpy_stage_keyword return integer;
+  attribute foreign of vpy_stage_keyword : function is "VHPIDIRECT {library} vpy_stage_keyword";
+
+  impure function vpy_staged_keyword return integer;
+  attribute foreign of vpy_staged_keyword : function is "VHPIDIRECT {library} vpy_staged_keyword";
+
+  impure function vpy_use_keywords return integer;
+  attribute foreign of vpy_use_keywords : function is "VHPIDIRECT {library} vpy_use_keywords";
+
   impure function vpy_execute(is_file : integer) return integer;
   attribute foreign of vpy_execute : function is "VHPIDIRECT {library} vpy_execute";
 
@@ -138,6 +147,24 @@ package body python_ffi_pkg is
   impure function vpy_array_write(chunk : integer_chunk_t; length : integer) return integer is
   begin
     report "VUnit Python bridge: foreign subprogram vpy_array_write is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_stage_keyword return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_stage_keyword is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_staged_keyword return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_staged_keyword is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_use_keywords return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_use_keywords is not bound" severity failure;
     return 1;
   end;
 
