@@ -29,17 +29,23 @@ BRIDGE_SOURCE = PACKAGE_PATH / "native" / "vunit_python_bridge.c"
 BINARY_PATH = PACKAGE_PATH / "bin"
 
 
+class PythonBridgeError(RuntimeError):
+    """
+    The Python bridge cannot be set up in this environment, e.g. due to a missing prerequisite.
+    """
+
+
 def check_python_build():
     """
     Reject Python builds that the bridge is known not to support.
     """
     if sysconfig.get_config_var("Py_GIL_DISABLED"):
-        raise RuntimeError(
+        raise PythonBridgeError(
             "VHDL Python support does not support free-threaded CPython builds "
             f"({sys.executable}). Use a regular (GIL) CPython build."
         )
     if sys.implementation.name != "cpython":
-        raise RuntimeError(f"VHDL Python support requires CPython, not {sys.implementation.name}")
+        raise PythonBridgeError(f"VHDL Python support requires CPython, not {sys.implementation.name}")
 
 
 def prepare_library(root: Path) -> Path:
@@ -67,14 +73,14 @@ def windows_python_dll() -> str:
 
     dll_handle = getattr(sys, "dllhandle", None)
     if dll_handle is None:
-        raise RuntimeError(
+        raise PythonBridgeError(
             f"VHDL Python support requires a CPython build using a Python DLL ({sys.executable} has none)"
         )
     buffer = ctypes.create_unicode_buffer(32768)
     kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
     length = kernel32.GetModuleFileNameW(ctypes.c_void_p(dll_handle), buffer, len(buffer))
     if length == 0:
-        raise RuntimeError("Failed to determine the path of the Python DLL")
+        raise PythonBridgeError("Failed to determine the path of the Python DLL")
     return buffer.value
 
 
@@ -83,17 +89,17 @@ def _prepare_windows_library(root: Path) -> Path:
     Select the prebuilt DLL for the running Python. Never compiles.
     """
     if sysconfig.get_platform() != "win-amd64":
-        raise RuntimeError(
+        raise PythonBridgeError(
             "VHDL Python support on Windows requires a 64-bit (x86-64) python.org style CPython, "
             f"{sys.executable} is built for {sysconfig.get_platform()}"
         )
     if hasattr(sys, "gettotalrefcount"):
-        raise RuntimeError("VHDL Python support does not provide bridge DLLs for debug builds of CPython")
+        raise PythonBridgeError("VHDL Python support does not provide bridge DLLs for debug builds of CPython")
 
     name = windows_dll_name()
     source = BINARY_PATH / name
     if not source.is_file():
-        raise RuntimeError(
+        raise PythonBridgeError(
             f"No prebuilt VUnit Python bridge DLL for Python {sys.version_info[0]}.{sys.version_info[1]} "
             f"({source!s} is missing). Released VUnit packages include the DLLs for the supported Python "
             "versions. A development checkout can build them with tools/build_python_bridge.py (requires MSVC)."
@@ -119,7 +125,7 @@ def _python_library() -> Path:
         or not ldlibrary.endswith((".so", ".dylib"))
         and ".so." not in ldlibrary
     ):
-        raise RuntimeError(
+        raise PythonBridgeError(
             f"VHDL Python support requires a CPython built with a shared Python library (--enable-shared). "
             f"{sys.executable} links Python statically."
         )
@@ -130,7 +136,7 @@ def _python_library() -> Path:
     for candidate in candidates:
         if candidate.is_file():
             return candidate.resolve()
-    raise RuntimeError(
+    raise PythonBridgeError(
         f"Failed to find the shared Python library {ldlibrary} of {sys.executable} "
         f"(searched {', '.join(str(path) for path in candidates)})"
     )
@@ -148,7 +154,7 @@ def _include_dirs() -> List[str]:
     for path in result:
         if (Path(path) / "Python.h").is_file():
             return result
-    raise RuntimeError(
+    raise PythonBridgeError(
         f"VHDL Python support needs the Python development headers (Python.h) of {sys.executable} "
         f"to build its bridge library, but they were not found in {', '.join(result)}. "
         "Install the development package of your Python (e.g. python3-dev)."
@@ -167,7 +173,7 @@ def _compiler() -> List[str]:
     for name in ("cc", "gcc", "clang"):
         if shutil.which(name):
             return [name]
-    raise RuntimeError(
+    raise PythonBridgeError(
         "VHDL Python support needs a C compiler (cc, gcc or clang) to build its bridge library. "
         "Install one or set the CC environment variable."
     )
@@ -213,10 +219,10 @@ def _prepare_posix_library(root: Path) -> Path:
     try:
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     except OSError as exc:
-        raise RuntimeError(f"Failed to run the C compiler {compiler[0]!r}: {exc}") from exc
+        raise PythonBridgeError(f"Failed to run the C compiler {compiler[0]!r}: {exc}") from exc
     if proc.returncode != 0:
         tmp.unlink(missing_ok=True)
-        raise RuntimeError(
+        raise PythonBridgeError(
             "Failed to build the VUnit Python bridge library:\n"
             + " ".join(shlex.quote(item) for item in cmd)
             + "\n"

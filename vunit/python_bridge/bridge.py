@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import List, Optional
 from weakref import WeakKeyDictionary
 
-from .native_library import PACKAGE_PATH, check_python_build, prepare_library, windows_python_dll
+from .native_library import (
+    PACKAGE_PATH,
+    PythonBridgeError,
+    check_python_build,
+    prepare_library,
+    windows_python_dll,
+)
 
 RUNTIME_SOURCE = PACKAGE_PATH / "runtime.py"
 VHDL_SOURCE_PATH = PACKAGE_PATH.parent / "vhdl" / "python_bridge" / "src"
@@ -54,7 +60,7 @@ def setup(project, output_path, simulator_class, vunit_context_file: Path) -> Py
     """
     simulator_name = None if simulator_class is None else simulator_class.name
     if simulator_name is not None and simulator_name not in SUPPORTED_SIMULATORS:
-        raise RuntimeError(
+        raise PythonBridgeError(
             f"VHDL Python support (add_vhdl_builtins(python=True)) requires NVC or GHDL, "
             f"it is not supported for {simulator_name}"
         )
@@ -115,7 +121,7 @@ def _config_text() -> str:
         lines["python_dll"] = windows_python_dll()
     for key, value in lines.items():
         if "\n" in value or "\r" in value:
-            raise RuntimeError(f"VHDL Python support cannot handle line breaks in the path {value!r}")
+            raise PythonBridgeError(f"VHDL Python support cannot handle line breaks in the path {value!r}")
     return "".join(f"{key}={value}\n" for key, value in lines.items())
 
 

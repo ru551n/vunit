@@ -55,6 +55,10 @@ Requirements
 The simulator runs Python in the same environment as VUnit itself, including
 an active virtual environment and its installed packages.
 
+A missing prerequisite, for example a missing C compiler or missing Python
+headers, is reported by ``add_vhdl_builtins(python=True)`` as an ``ERROR``
+explaining what to install, after which VUnit exits with code 1.
+
 python_execute
 --------------
 

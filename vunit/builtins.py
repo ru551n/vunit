@@ -16,6 +16,7 @@ import importlib.resources
 import importlib.util
 import re
 import operator
+import sys
 from dataclasses import dataclass
 from typing import TypeVar, Any, Tuple
 
@@ -493,15 +494,21 @@ in your VUnit Git repository? You have to do this first if installing using setu
         if not self._vhdl_standard >= VHDL.STD_2008:
             raise RuntimeError("VHDL Python support only supports vhdl 2008 and later")
 
-        from vunit.python_bridge.bridge import setup  # pylint: disable=import-outside-toplevel
+        # pylint: disable=import-outside-toplevel
+        from vunit.python_bridge.bridge import setup
+        from vunit.python_bridge.native_library import PythonBridgeError
 
         vunit_context = VHDL_PATH / "vunit_context.vhd"
-        bridge = setup(
-            self._vunit_obj._project,  # pylint: disable=protected-access
-            self._vunit_obj._output_path,  # pylint: disable=protected-access
-            self._simulator_class,
-            vunit_context,
-        )
+        try:
+            bridge = setup(
+                self._vunit_obj._project,  # pylint: disable=protected-access
+                self._vunit_obj._output_path,  # pylint: disable=protected-access
+                self._simulator_class,
+                vunit_context,
+            )
+        except PythonBridgeError as exc:
+            LOGGER.error("%s", exc)
+            sys.exit(1)
         for file_name in sorted(VHDL_PATH.glob("*.vhd")):
             if file_name != vunit_context:
                 self._add_files(file_name)
