@@ -22,7 +22,7 @@ from ..ostools import Process
 from . import SimulatorInterface, ListOfStringOption, StringOption, BooleanOption
 from . import check_executable
 from ..vhdl_standard import VHDL
-from .. import python_bridge
+from ..python_bridge import simulator_hooks
 from ._viewermixin import ViewerMixin
 
 LOGGER = logging.getLogger(__name__)
@@ -321,7 +321,7 @@ class GHDLInterface(SimulatorInterface, ViewerMixin):  # pylint: disable=too-man
         if self._has_output_flag():
             cmd += ["-o", bin_path]
         cmd += config.sim_options.get("ghdl.elab_flags", [])
-        cmd += python_bridge.ghdl_elab_flags(self._project, self._backend)
+        cmd += simulator_hooks.ghdl_elab_flags(self._project, self._backend)
         if config.sim_options.get("enable_coverage", False):
             if self._backend == "gcc":
                 # Enable coverage in linker
@@ -394,7 +394,7 @@ class GHDLInterface(SimulatorInterface, ViewerMixin):  # pylint: disable=too-man
 
         status = True
 
-        gcov_env = python_bridge.ghdl_run_env(self._project, environ.copy())
+        gcov_env = simulator_hooks.ghdl_run_env(self._project, environ.copy())
         if config.sim_options.get("enable_coverage", False):
             if self._backend == "gcc":
                 # Set environment variable to put the coverage output in the test_output folder

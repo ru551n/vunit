@@ -85,14 +85,16 @@ begin
         unmock(python_logger);
 
       elsif run("python_execute with missing file fails") then
+        -- The error message shows the path in the native format of the OS
+        python_execute(source => "import os" & LF & "def native_repr(path):" & LF & "    return repr(os.path.normpath(path))");
         mock(python_logger, failure);
         python_execute(file_name => tb_path(runner_cfg) & "models/does_not_exist.py");
         check_only_log(
           python_logger,
           "python_execute(file_name => """ & tb_path(runner_cfg) & "models/does_not_exist.py"")" &
           " failed:" & LF &
-          "FileNotFoundError: [Errno 2] No such file or directory: '" &
-          tb_path(runner_cfg) & "models/does_not_exist.py'",
+          "FileNotFoundError: [Errno 2] No such file or directory: " &
+          string'(python_call("native_repr", string'(tb_path(runner_cfg) & "models/does_not_exist.py"))),
           failure
         );
         unmock(python_logger);

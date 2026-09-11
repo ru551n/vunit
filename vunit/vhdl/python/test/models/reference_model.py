@@ -11,8 +11,9 @@ during execution and the relative/absolute file name resolution.
 
 from pathlib import Path
 
-FILE_DURING_EXEC = __file__
-MODEL_DIR = str(Path(__file__).parent)
+# POSIX style, to compare with tb_path on all platforms
+FILE_DURING_EXEC = Path(__file__).as_posix()
+MODEL_DIR = Path(__file__).parent.as_posix()
 
 
 def get_model_dir():

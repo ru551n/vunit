@@ -24,18 +24,18 @@ import sysconfig
 from pathlib import Path
 
 
-def _load_python_bridge():
+def _load_native_library():
     """
-    Load vunit/python_bridge by path, without importing vunit and its dependencies.
+    Load vunit/python_bridge/native_library.py by path, without importing vunit and its dependencies.
     """
-    path = Path(__file__).parent.parent / "vunit" / "python_bridge" / "__init__.py"
-    spec = importlib.util.spec_from_file_location("_vunit_python_bridge_setup", path)
+    path = Path(__file__).parent.parent / "vunit" / "python_bridge" / "native_library.py"
+    spec = importlib.util.spec_from_file_location("_vunit_python_bridge_native_library", path)
     module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(module)  # type: ignore[union-attr]
     return module
 
 
-PYTHON_BRIDGE = _load_python_bridge()
+NATIVE_LIBRARY = _load_native_library()
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PYTHON_BRIDGE.BINARY_PATH,
+        default=NATIVE_LIBRARY.BINARY_PATH,
         help="Directory to write the DLL to (default: %(default)s)",
     )
     args = parser.parse_args()
@@ -63,7 +63,7 @@ def main():
         raise SystemExit(f"Missing import library {libs_dir / (python_lib + '.lib')}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    output = args.output_dir / PYTHON_BRIDGE.windows_dll_name()
+    output = args.output_dir / NATIVE_LIBRARY.windows_dll_name()
     build_dir = args.output_dir / "build"
     build_dir.mkdir(exist_ok=True)
 
@@ -77,7 +77,7 @@ def main():
         "/Brepro",
         f"/I{include_dir}",
         f"/Fo{build_dir}\\",
-        str(PYTHON_BRIDGE.BRIDGE_SOURCE),
+        str(NATIVE_LIBRARY.BRIDGE_SOURCE),
         f"/Fe{output}",
         "/link",
         "/Brepro",
