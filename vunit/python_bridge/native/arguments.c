@@ -5,9 +5,10 @@
  *
  * Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
  *
- * Data transferred from VHDL: a byte buffer for strings (source code, file
- * and function names, string arguments), the positional arguments of the
- * next python_call and keyword argument values staged by kw().
+ * Data transferred from VHDL: a byte buffer for strings (Python source code,
+ * expressions, file and session names) and the integer_array_t value being
+ * pushed, which is staged in the runtime and then referred to from the Python
+ * source text VHDL builds.
  */
 
 #include "bridge.h"
@@ -21,8 +22,8 @@ static size_t g_buffer_length = 0;
 static size_t g_buffer_capacity = 0;
 
 /* Strong references, only touched with the GIL held. */
-static PyObject *g_args = NULL;    /* list of positional arguments of the next call */
-static PyObject *g_pending = NULL; /* bytearray backing the array argument being filled */
+static PyObject *g_array = NULL;   /* NumPy array of the integer_array_t being pushed */
+static PyObject *g_pending = NULL; /* bytearray backing it */
 
 /* View into g_pending. It is owned by us and never resized while referenced
  * (NumPy holds a buffer export on it), so the pointer stays valid. */
@@ -30,58 +31,17 @@ static char *g_pending_data = NULL;
 static size_t g_pending_size = 0;
 static size_t g_pending_position = 0;
 
-/* Id of the keyword argument value staged last. */
-static int32_t g_staged_keyword = 0;
-
 /* New reference to the transfer buffer as a str. */
 PyObject *vpy_buffer_as_str(void) {
   return PyUnicode_DecodeUTF8(g_buffer == NULL ? "" : g_buffer, (Py_ssize_t)g_buffer_length, "surrogateescape");
 }
 
-static void clear_pending(void) {
+void vpy_clear_arguments(void) {
+  Py_CLEAR(g_array);
   Py_CLEAR(g_pending);
   g_pending_data = NULL;
   g_pending_size = 0;
   g_pending_position = 0;
-}
-
-void vpy_clear_arguments(void) {
-  clear_pending();
-  Py_CLEAR(g_args);
-}
-
-int vpy_reset_arguments(void) {
-  vpy_clear_arguments();
-  g_args = PyList_New(0);
-  if (g_args == NULL) {
-    vpy_set_error_from_python();
-    return VPY_ERROR;
-  }
-  return VPY_OK;
-}
-
-PyObject *vpy_arguments(void) { return g_args; }
-
-/* Append value (a new reference or NULL, which is consumed) to the arguments. */
-static int append_argument(PyObject *value) {
-  int status;
-
-  if (value == NULL) {
-    vpy_set_error_from_python();
-    return VPY_ERROR;
-  }
-  if (g_args == NULL) {
-    Py_DECREF(value);
-    vpy_set_error("Internal error: argument pushed before vpy_begin");
-    return VPY_ERROR;
-  }
-  status = PyList_Append(g_args, value);
-  Py_DECREF(value);
-  if (status < 0) {
-    vpy_set_error_from_python();
-    return VPY_ERROR;
-  }
-  return VPY_OK;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -120,90 +80,22 @@ VPY_EXPORT int32_t vpy_buffer_append(const char *chunk, int32_t length) {
   return VPY_OK;
 }
 
-VPY_EXPORT int32_t vpy_push_string(void) {
-  PyGILState_STATE gil;
-  int status;
-
-  if (vpy_enter(&gil) != VPY_OK) {
-    return VPY_ERROR;
-  }
-  status = append_argument(vpy_buffer_as_str());
-  PyGILState_Release(gil);
-  return status;
-}
-
-VPY_EXPORT int32_t vpy_push_integer(int32_t value) {
-  PyGILState_STATE gil;
-  int status;
-
-  if (vpy_enter(&gil) != VPY_OK) {
-    return VPY_ERROR;
-  }
-  status = append_argument(PyLong_FromLong((long)value));
-  PyGILState_Release(gil);
-  return status;
-}
-
-VPY_EXPORT int32_t vpy_push_real(double value) {
-  PyGILState_STATE gil;
-  int status;
-
-  if (vpy_enter(&gil) != VPY_OK) {
-    return VPY_ERROR;
-  }
-  status = append_argument(PyFloat_FromDouble(value));
-  PyGILState_Release(gil);
-  return status;
-}
-
-VPY_EXPORT int32_t vpy_push_boolean(int32_t value) {
-  PyGILState_STATE gil;
-  int status;
-
-  if (vpy_enter(&gil) != VPY_OK) {
-    return VPY_ERROR;
-  }
-  status = append_argument(PyBool_FromLong((long)(value != 0)));
-  PyGILState_Release(gil);
-  return status;
-}
-
-/* Push the buffer, holding the bits of a signed/unsigned value (MSB first), as a Python int. */
-VPY_EXPORT int32_t vpy_push_bits(int32_t is_signed) {
-  PyGILState_STATE gil;
-  PyObject *bits;
-  PyObject *value = NULL;
-  int status;
-
-  if (vpy_enter(&gil) != VPY_OK) {
-    return VPY_ERROR;
-  }
-  bits = vpy_buffer_as_str();
-  if (bits != NULL) {
-    value = PyObject_CallMethod(vpy_runtime(), "bits_to_int", "Oi", bits, (int)(is_signed != 0));
-    Py_DECREF(bits);
-  }
-  status = append_argument(value);
-  PyGILState_Release(gil);
-  return status;
-}
-
 /*
- * Push an integer_array_t argument. Allocates the Python-owned storage that
- * the element values are subsequently written to with vpy_array_write.
+ * Push an integer_array_t value. Allocates the Python-owned storage that the
+ * element values are subsequently written to with vpy_array_write. The value
+ * is made available to Python source code by vpy_stage.
  */
 VPY_EXPORT int32_t vpy_push_array(int32_t length, int32_t width, int32_t height, int32_t depth, int32_t bit_width,
                                   int32_t is_signed) {
   PyGILState_STATE gil;
   size_t size = length > 0 ? (size_t)length * sizeof(int32_t) : 0;
   PyObject *storage = NULL;
-  PyObject *array = NULL;
   int status = VPY_ERROR;
 
-  if (vpy_enter(&gil) != VPY_OK) {
+  if (vpy_initialize() != VPY_OK || vpy_enter(&gil) != VPY_OK) {
     return VPY_ERROR;
   }
-  clear_pending();
+  vpy_clear_arguments();
   if (length < 0) {
     vpy_set_error("Internal error: negative array length");
     goto done;
@@ -218,93 +110,24 @@ VPY_EXPORT int32_t vpy_push_array(int32_t length, int32_t width, int32_t height,
     memset(PyByteArray_AsString(storage), 0, size);
   }
 
-  array = PyObject_CallMethod(vpy_runtime(), "make_array", "Oiiiiii", storage, (int)length, (int)width, (int)height,
-                              (int)depth, (int)bit_width, (int)(is_signed != 0));
-  if (array == NULL) {
+  g_array = PyObject_CallMethod(vpy_runtime(), "make_array", "Oiiiiii", storage, (int)length, (int)width, (int)height,
+                                (int)depth, (int)bit_width, (int)(is_signed != 0));
+  if (g_array == NULL) {
     vpy_set_error_from_python();
     goto done;
   }
 
   /* The array keeps the storage alive; we keep our own reference too so the
-   * cached data pointer is valid until the next clear_pending(). */
+   * cached data pointer is valid until the next vpy_clear_arguments(). */
   g_pending = storage;
   storage = NULL;
   g_pending_data = PyByteArray_AsString(g_pending);
   g_pending_size = size;
   g_pending_position = 0;
-  status = append_argument(array);
-
-done:
-  Py_XDECREF(storage);
-  PyGILState_Release(gil);
-  return status;
-}
-
-/*
- * Stage the last pushed argument as a keyword argument value named by the
- * buffer. The runtime keeps it under an id, see vpy_staged_keyword.
- */
-VPY_EXPORT int32_t vpy_stage_keyword(void) {
-  PyGILState_STATE gil;
-  Py_ssize_t count;
-  PyObject *name = NULL;
-  PyObject *value = NULL;
-  PyObject *id = NULL;
-  int status = VPY_ERROR;
-
-  if (vpy_enter(&gil) != VPY_OK) {
-    return VPY_ERROR;
-  }
-  count = g_args == NULL ? 0 : PyList_Size(g_args);
-  if (count < 1) {
-    vpy_set_error("Internal error: no keyword argument value pushed");
-    goto done;
-  }
-  value = PyList_GetItem(g_args, count - 1); /* borrowed */
-  Py_INCREF(value);
-  name = vpy_buffer_as_str();
-  if (name == NULL || PyList_SetSlice(g_args, count - 1, count, NULL) < 0) {
-    vpy_set_error_from_python();
-    goto done;
-  }
-  id = PyObject_CallMethod(vpy_runtime(), "stage_keyword", "OO", name, value);
-  if (id == NULL) {
-    vpy_set_error_from_python();
-    goto done;
-  }
-  g_staged_keyword = (int32_t)PyLong_AsLong(id);
-  if (PyErr_Occurred()) {
-    vpy_set_error_from_python();
-    goto done;
-  }
   status = VPY_OK;
 
 done:
-  Py_XDECREF(id);
-  Py_XDECREF(name);
-  Py_XDECREF(value);
-  PyGILState_Release(gil);
-  return status;
-}
-
-VPY_EXPORT int32_t vpy_staged_keyword(void) { return g_staged_keyword; }
-
-/* Use the staged keyword arguments whose ids are listed in the buffer in the next call. */
-VPY_EXPORT int32_t vpy_use_keywords(void) {
-  PyGILState_STATE gil;
-  PyObject *ids;
-  int status = VPY_ERROR;
-
-  if (vpy_enter(&gil) != VPY_OK) {
-    return VPY_ERROR;
-  }
-  ids = vpy_buffer_as_str();
-  if (ids == NULL) {
-    vpy_set_error_from_python();
-  } else {
-    status = vpy_finish_call(PyObject_CallMethod(vpy_runtime(), "use_keywords", "O", ids));
-    Py_DECREF(ids);
-  }
+  Py_XDECREF(storage);
   PyGILState_Release(gil);
   return status;
 }
@@ -323,4 +146,46 @@ VPY_EXPORT int32_t vpy_array_write(const int32_t *chunk, int32_t length) {
   memcpy(g_pending_data + g_pending_position, chunk, bytes);
   g_pending_position += bytes;
   return VPY_OK;
+}
+
+/*
+ * Stage the pushed array in the runtime. Python source code built by VHDL
+ * refers to it as __vunit__.staged(<id>).
+ *
+ * Returns the id (>= 1) or -1 on failure, with the error text set.
+ */
+VPY_EXPORT int32_t vpy_stage(void) {
+  PyGILState_STATE gil;
+  PyObject *id;
+  long value;
+  int32_t result = -1;
+
+  if (vpy_initialize() != VPY_OK || vpy_enter(&gil) != VPY_OK) {
+    return -1;
+  }
+  if (g_array == NULL) {
+    vpy_set_error("Internal error: no value pushed before vpy_stage");
+    goto done;
+  }
+  id = PyObject_CallMethod(vpy_runtime(), "stage_value", "O", g_array);
+  if (id == NULL) {
+    vpy_set_error_from_python();
+    goto done;
+  }
+  value = PyLong_AsLong(id);
+  Py_DECREF(id);
+  if (PyErr_Occurred()) {
+    vpy_set_error_from_python();
+    goto done;
+  }
+  if (value < 1 || value > INT32_MAX) {
+    vpy_set_error("Internal error: invalid staged value id");
+    goto done;
+  }
+  result = (int32_t)value;
+
+done:
+  vpy_clear_arguments();
+  PyGILState_Release(gil);
+  return result;
 }

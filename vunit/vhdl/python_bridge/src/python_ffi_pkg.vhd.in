@@ -8,15 +8,26 @@
 --
 -- This file is a template. VUnit substitutes the library token with the name
 -- the simulator uses to find the bridge library and compiles the result into
--- vunit_lib when Python support is enabled (add_vhdl_builtins(python=True)).
+-- vunit_lib when Python support is enabled with add_python(). The public API
+-- is python_pkg/python_ffi_pkg, which is implemented on top of this package.
 --
 -- Only scalars and constrained arrays cross the foreign interface since their
 -- ABI is identical for NVC and GHDL on all platforms.
 
-package python_ffi_pkg is
+package python_bridge_pkg is
   constant chunk_length : positive := 1024;
   subtype string_chunk_t is string(1 to chunk_length);
   subtype integer_chunk_t is integer_vector(0 to chunk_length - 1);
+  subtype real_chunk_t is real_vector(0 to chunk_length - 1);
+
+  -- Start the interpreter. Idempotent.
+  impure function vpy_setup return integer;
+  attribute foreign of vpy_setup : function is "VHPIDIRECT {library} vpy_setup";
+
+  -- Flush Python's streams and drop the last result and the staged values.
+  -- The interpreter is not finalized: later operations keep working.
+  impure function vpy_cleanup return integer;
+  attribute foreign of vpy_cleanup : function is "VHPIDIRECT {library} vpy_cleanup";
 
   impure function vpy_buffer_clear return integer;
   attribute foreign of vpy_buffer_clear : function is "VHPIDIRECT {library} vpy_buffer_clear";
@@ -24,23 +35,19 @@ package python_ffi_pkg is
   impure function vpy_buffer_append(chunk : string_chunk_t; length : integer) return integer;
   attribute foreign of vpy_buffer_append : function is "VHPIDIRECT {library} vpy_buffer_append";
 
+  -- Start an operation in the session named by the buffer ("default" is __main__).
   impure function vpy_begin return integer;
   attribute foreign of vpy_begin : function is "VHPIDIRECT {library} vpy_begin";
 
-  impure function vpy_push_string return integer;
-  attribute foreign of vpy_push_string : function is "VHPIDIRECT {library} vpy_push_string";
+  -- Execute the buffer as Python source (is_file = 0) or as a file name (is_file = 1).
+  impure function vpy_execute(is_file : integer) return integer;
+  attribute foreign of vpy_execute : function is "VHPIDIRECT {library} vpy_execute";
 
-  impure function vpy_push_integer(value : integer) return integer;
-  attribute foreign of vpy_push_integer : function is "VHPIDIRECT {library} vpy_push_integer";
-
-  impure function vpy_push_real(value : real) return integer;
-  attribute foreign of vpy_push_real : function is "VHPIDIRECT {library} vpy_push_real";
-
-  impure function vpy_push_boolean(value : integer) return integer;
-  attribute foreign of vpy_push_boolean : function is "VHPIDIRECT {library} vpy_push_boolean";
-
-  impure function vpy_push_bits(is_signed : integer) return integer;
-  attribute foreign of vpy_push_bits : function is "VHPIDIRECT {library} vpy_push_bits";
+  -- Evaluate the buffer as a Python expression and convert the value to the
+  -- VHDL type given by kind. width is the length of a std_ulogic_vector,
+  -- signed or unsigned result, -1 when it is not known.
+  impure function vpy_eval(kind, width : integer) return integer;
+  attribute foreign of vpy_eval : function is "VHPIDIRECT {library} vpy_eval";
 
   impure function vpy_push_array(length, width, height, depth, bit_width, is_signed : integer) return integer;
   attribute foreign of vpy_push_array : function is "VHPIDIRECT {library} vpy_push_array";
@@ -48,23 +55,10 @@ package python_ffi_pkg is
   impure function vpy_array_write(chunk : integer_chunk_t; length : integer) return integer;
   attribute foreign of vpy_array_write : function is "VHPIDIRECT {library} vpy_array_write";
 
-  impure function vpy_stage_keyword return integer;
-  attribute foreign of vpy_stage_keyword : function is "VHPIDIRECT {library} vpy_stage_keyword";
-
-  impure function vpy_staged_keyword return integer;
-  attribute foreign of vpy_staged_keyword : function is "VHPIDIRECT {library} vpy_staged_keyword";
-
-  impure function vpy_use_keywords return integer;
-  attribute foreign of vpy_use_keywords : function is "VHPIDIRECT {library} vpy_use_keywords";
-
-  impure function vpy_execute(is_file : integer) return integer;
-  attribute foreign of vpy_execute : function is "VHPIDIRECT {library} vpy_execute";
-
-  impure function vpy_call return integer;
-  attribute foreign of vpy_call : function is "VHPIDIRECT {library} vpy_call";
-
-  impure function vpy_result(kind, width : integer) return integer;
-  attribute foreign of vpy_result : function is "VHPIDIRECT {library} vpy_result";
+  -- Stage the pushed array and return its id (>= 1), -1 on error. Python
+  -- source code refers to the value as __vunit__.staged(<id>).
+  impure function vpy_stage return integer;
+  attribute foreign of vpy_stage : function is "VHPIDIRECT {library} vpy_stage";
 
   impure function vpy_result_integer return integer;
   attribute foreign of vpy_result_integer : function is "VHPIDIRECT {library} vpy_result_integer";
@@ -84,12 +78,27 @@ package python_ffi_pkg is
   procedure vpy_result_read_integers(chunk : out integer_chunk_t; offset, length : integer);
   attribute foreign of vpy_result_read_integers : procedure is "VHPIDIRECT {library} vpy_result_read_integers";
 
+  procedure vpy_result_read_reals(chunk : out real_chunk_t; offset, length : integer);
+  attribute foreign of vpy_result_read_reals : procedure is "VHPIDIRECT {library} vpy_result_read_reals";
+
   procedure vpy_error_read(chunk : out string_chunk_t; offset, length : integer);
   attribute foreign of vpy_error_read : procedure is "VHPIDIRECT {library} vpy_error_read";
 end package;
 
-package body python_ffi_pkg is
+package body python_bridge_pkg is
   -- The bodies are replaced by the foreign implementations and never executed.
+  impure function vpy_setup return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_setup is not bound" severity failure;
+    return 1;
+  end;
+
+  impure function vpy_cleanup return integer is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_cleanup is not bound" severity failure;
+    return 1;
+  end;
+
   impure function vpy_buffer_clear return integer is
   begin
     report "VUnit Python bridge: foreign subprogram vpy_buffer_clear is not bound" severity failure;
@@ -108,33 +117,15 @@ package body python_ffi_pkg is
     return 1;
   end;
 
-  impure function vpy_push_string return integer is
+  impure function vpy_execute(is_file : integer) return integer is
   begin
-    report "VUnit Python bridge: foreign subprogram vpy_push_string is not bound" severity failure;
+    report "VUnit Python bridge: foreign subprogram vpy_execute is not bound" severity failure;
     return 1;
   end;
 
-  impure function vpy_push_integer(value : integer) return integer is
+  impure function vpy_eval(kind, width : integer) return integer is
   begin
-    report "VUnit Python bridge: foreign subprogram vpy_push_integer is not bound" severity failure;
-    return 1;
-  end;
-
-  impure function vpy_push_real(value : real) return integer is
-  begin
-    report "VUnit Python bridge: foreign subprogram vpy_push_real is not bound" severity failure;
-    return 1;
-  end;
-
-  impure function vpy_push_boolean(value : integer) return integer is
-  begin
-    report "VUnit Python bridge: foreign subprogram vpy_push_boolean is not bound" severity failure;
-    return 1;
-  end;
-
-  impure function vpy_push_bits(is_signed : integer) return integer is
-  begin
-    report "VUnit Python bridge: foreign subprogram vpy_push_bits is not bound" severity failure;
+    report "VUnit Python bridge: foreign subprogram vpy_eval is not bound" severity failure;
     return 1;
   end;
 
@@ -150,40 +141,10 @@ package body python_ffi_pkg is
     return 1;
   end;
 
-  impure function vpy_stage_keyword return integer is
+  impure function vpy_stage return integer is
   begin
-    report "VUnit Python bridge: foreign subprogram vpy_stage_keyword is not bound" severity failure;
-    return 1;
-  end;
-
-  impure function vpy_staged_keyword return integer is
-  begin
-    report "VUnit Python bridge: foreign subprogram vpy_staged_keyword is not bound" severity failure;
-    return 1;
-  end;
-
-  impure function vpy_use_keywords return integer is
-  begin
-    report "VUnit Python bridge: foreign subprogram vpy_use_keywords is not bound" severity failure;
-    return 1;
-  end;
-
-  impure function vpy_execute(is_file : integer) return integer is
-  begin
-    report "VUnit Python bridge: foreign subprogram vpy_execute is not bound" severity failure;
-    return 1;
-  end;
-
-  impure function vpy_call return integer is
-  begin
-    report "VUnit Python bridge: foreign subprogram vpy_call is not bound" severity failure;
-    return 1;
-  end;
-
-  impure function vpy_result(kind, width : integer) return integer is
-  begin
-    report "VUnit Python bridge: foreign subprogram vpy_result is not bound" severity failure;
-    return 1;
+    report "VUnit Python bridge: foreign subprogram vpy_stage is not bound" severity failure;
+    return -1;
   end;
 
   impure function vpy_result_integer return integer is
@@ -218,6 +179,11 @@ package body python_ffi_pkg is
   procedure vpy_result_read_integers(chunk : out integer_chunk_t; offset, length : integer) is
   begin
     report "VUnit Python bridge: foreign subprogram vpy_result_read_integers is not bound" severity failure;
+  end;
+
+  procedure vpy_result_read_reals(chunk : out real_chunk_t; offset, length : integer) is
+  begin
+    report "VUnit Python bridge: foreign subprogram vpy_result_read_reals is not bound" severity failure;
   end;
 
   procedure vpy_error_read(chunk : out string_chunk_t; offset, length : integer) is

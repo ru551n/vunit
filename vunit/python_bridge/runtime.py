@@ -11,7 +11,7 @@ This module is executed *inside the simulator process* by the embedded
 interpreter of the native bridge (native/*.c). It is loaded by file
 path, not imported from the vunit package, and must therefore not import
 anything from vunit. It is a private implementation detail of the VHDL
-python_execute/python_call operations.
+exec/eval operations.
 """
 
 import builtins
@@ -19,12 +19,13 @@ import linecache
 import math
 import numbers
 import os
+import struct
 import sys
 import traceback
 from pathlib import Path
 import __main__
 
-# Result kinds, must match python_pkg
+# Result kinds, must match python_ffi_pkg
 KIND_INTEGER = 0
 KIND_REAL = 1
 KIND_BOOLEAN = 2
@@ -34,6 +35,8 @@ KIND_STD_ULOGIC_VECTOR = 5
 KIND_SIGNED = 6
 KIND_UNSIGNED = 7
 KIND_INTEGER_ARRAY = 8
+KIND_INTEGER_VECTOR = 9
+KIND_REAL_VECTOR = 10
 
 VHDL_TYPE_NAMES = {
     KIND_INTEGER: "integer",
@@ -45,6 +48,8 @@ VHDL_TYPE_NAMES = {
     KIND_SIGNED: "signed",
     KIND_UNSIGNED: "unsigned",
     KIND_INTEGER_ARRAY: "integer_array_t",
+    KIND_INTEGER_VECTOR: "integer_vector",
+    KIND_REAL_VECTOR: "real_vector",
 }
 
 STD_ULOGIC_VALUES = frozenset("UX01ZWLH-")
@@ -54,6 +59,9 @@ TEXT_ENCODING = "utf-8"
 TEXT_ERRORS = "surrogateescape"
 
 DEFAULT_SESSION = "default"
+
+# Name of the bridge object injected into every session namespace.
+HANDLE_NAME = "__vunit__"
 
 _NO_VALUE = object()
 
@@ -70,77 +78,123 @@ def _is_bool(value):
     return numpy is not None and isinstance(value, numpy.bool_)
 
 
+def _is_float(value):
+    """
+    True for Python and NumPy floats only.
+
+    An int is not accepted, matching the PyFloat_Check of the other
+    python_ffi_pkg implementations.
+    """
+    if isinstance(value, float):
+        return True
+    numpy = sys.modules.get("numpy")
+    return numpy is not None and isinstance(value, numpy.floating)
+
+
+def _is_integer(value):
+    """True for Python and NumPy integers, but not for booleans."""
+    return not _is_bool(value) and isinstance(value, numbers.Integral)
+
+
 def _encode(text):
     return text.encode(TEXT_ENCODING, TEXT_ERRORS)
 
 
-class KeywordArguments:
+def _type_error(kind, value, expected):
     """
-    Keyword argument values created by kw() in VHDL, and those selected for the next call.
+    The error raised when a Python value cannot become the requested VHDL type.
 
-    kw() transfers its value immediately (exactly, like a positional argument) and
-    VHDL only keeps an id. Staged values live until the simulation ends so that a
-    kw() constant can be used in several calls.
+    The operation it belongs to (exec, eval, call, ...) is added by VHDL.
+    """
+    return TypeError(
+        f"Cannot convert Python {_type_name(value)} ({value!r:.200}) "
+        f"to VHDL {VHDL_TYPE_NAMES[kind]}; expected {expected}"
+    )
+
+
+class StagedValues:
+    """
+    Values transferred from VHDL and kept under an id.
+
+    VHDL transfers an integer_array_t once and then refers to it as
+    ``__vunit__.staged(<id>)`` in the Python expressions it evaluates. Staged
+    values live until python_cleanup so that one VHDL constant can be used in
+    several calls. Every use gets its own copy of the NumPy array so that a
+    function modifying it in place does not affect the next use.
     """
 
     def __init__(self):
-        self._staged = {}  # id -> (name, value)
-        self._next = {}
+        self._values = {}  # id -> (value, bit_width, is_signed)
 
-    def stage(self, name, value):
+    def stage(self, value, bit_width, is_signed):
         """
         Stage a value and return its id.
         """
-        if not name.isidentifier():
-            raise ValueError(f"kw: {name!r} is not a valid Python keyword argument name")
-        staged_id = len(self._staged) + 1
-        self._staged[staged_id] = (name, value)
+        staged_id = len(self._values) + 1
+        self._values[staged_id] = (value, bit_width, bool(is_signed))
         return staged_id
 
-    def use(self, ids):
+    def get(self, staged_id):
         """
-        Select the staged values whose ids are listed (";" separated) for the next call.
+        A copy of a staged value with its metadata, as (value, bit_width, is_signed).
         """
+        entry = self._values.get(staged_id)
+        if entry is None:
+            raise ValueError(f"There is no value staged under the id {staged_id!r}")
+        value, bit_width, is_signed = entry
         numpy = sys.modules.get("numpy")
-        keywords = {}
-        for item in ids.split(";"):
-            if item == "":
-                continue
-            name, value = self._staged[int(item)]
-            if name in keywords:
-                raise TypeError(f"keyword argument {name!r} is given more than once")
-            if numpy is not None and isinstance(value, numpy.ndarray):
-                # The function may modify it in place, keep the staged value intact
-                value = value.copy()
-            keywords[name] = value
-        self._next = keywords
+        if numpy is not None and isinstance(value, numpy.ndarray):
+            # The user code may modify it in place, keep the staged value intact
+            value = value.copy()
+        return (value, bit_width, is_signed)
 
-    def take(self):
+    def clear(self):
         """
-        The keyword arguments for the call being made; the selection is reset.
+        Drop all staged values.
         """
-        keywords, self._next = self._next, {}
-        return keywords
+        self._values.clear()
+
+
+class BridgeHandle:
+    """
+    The ``__vunit__`` object that VHDL-generated Python expressions use.
+
+    It is the only name the bridge adds to a session namespace.
+    """
+
+    def __init__(self, runtime):
+        self._runtime = runtime
+
+    def staged(self, staged_id):
+        """
+        The value VHDL staged under the given id.
+        """
+        return self._runtime.staged(staged_id)
+
+    def __repr__(self):
+        return "<VUnit python bridge>"
 
 
 class Runtime:  # pylint: disable=too-many-instance-attributes
     """
-    State of the embedded Python session: one persistent namespace shared by
-    all python_execute and python_call operations of a simulation.
+    State of the embedded Python session: one persistent namespace per session,
+    shared by all exec and eval operations of a simulation.
     """
 
     def __init__(self, base_dir, prefix):
         self._base_dir = Path(base_dir)
+        self._handle = BridgeHandle(self)
         # One namespace per session. The default session uses __main__.
         self._sessions = {DEFAULT_SESSION: __main__.__dict__}
+        __main__.__dict__[HANDLE_NAME] = self._handle
         self._session = DEFAULT_SESSION
-        self._inline_count = 0
+        self._exec_count = 0
+        self._eval_count = 0
         self._result = _NO_VALUE
-        self._function_name = ""
-        # Metadata of the integer_array_t arguments of the current call, keyed
-        # by id() of the NumPy array created for them.
+        # Metadata of the integer_array_t values handed to the current
+        # operation, keyed by id() of the NumPy array created for them.
         self._array_meta = {}
-        self._keywords = KeywordArguments()
+        self._staged = StagedValues()
 
         self._check_environment(prefix)
 
@@ -188,26 +242,42 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         self._flush()
         return "".join(traceback.format_exception(type(exc), exc, traceback_)).rstrip("\n")
 
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def setup(self):
+        """
+        Prepare for the operations to come. Idempotent: the interpreter and the
+        namespaces are created once and python_setup may be called any number
+        of times.
+        """
+        self._flush()
+
+    def cleanup(self):
+        """
+        Release what the simulation acquired: the last result and the staged
+        values. The interpreter and the session namespaces are kept, so
+        operations after python_cleanup keep working.
+        """
+        self._result = _NO_VALUE
+        self._staged.clear()
+        self._array_meta.clear()
+        self._flush()
+
     def select_session(self, name):
         """
         Make the namespace of a session current, creating it on first use.
         """
         if name not in self._sessions:
-            self._sessions[name] = {"__name__": "__main__", "__builtins__": builtins}
+            self._sessions[name] = {
+                "__name__": "__main__",
+                "__builtins__": builtins,
+                HANDLE_NAME: self._handle,
+            }
         self._session = name
-        self._keywords.take()  # a new operation starts without keyword arguments
-
-    def stage_keyword(self, name, value):
-        """
-        Stage a keyword argument value created by kw() in VHDL and return its id.
-        """
-        return self._keywords.stage(name, value)
-
-    def use_keywords(self, ids):
-        """
-        Use staged keyword arguments in the next call.
-        """
-        self._keywords.use(ids)
+        self._result = _NO_VALUE
+        self._array_meta = {}
 
     @property
     def _namespace(self):
@@ -216,8 +286,16 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         """
         return self._sessions[self._session]
 
+    def _source_name(self, operation, count):
+        """
+        Pseudo file name of inline source code, shown in tracebacks.
+        """
+        if self._session == DEFAULT_SESSION:
+            return f"<{operation} #{count}>"
+        return f"<{operation} {self._session} #{count}>"
+
     # ------------------------------------------------------------------
-    # python_execute
+    # exec
     # ------------------------------------------------------------------
 
     def execute(self, text, is_file):
@@ -236,11 +314,8 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         """
         Execute inline source code, registered in linecache for readable tracebacks.
         """
-        self._inline_count += 1
-        if self._session == DEFAULT_SESSION:
-            file_name = f"<python_execute #{self._inline_count}>"
-        else:
-            file_name = f"<python_execute {self._session} #{self._inline_count}>"
+        self._exec_count += 1
+        file_name = self._source_name("exec", self._exec_count)
         # Make tracebacks show the source lines of inline code
         linecache.cache[file_name] = (len(source), None, source.splitlines(True), file_name)
         code = compile(source, file_name, "exec", dont_inherit=True)
@@ -251,7 +326,7 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         Absolute path of a Python file, relative names are relative to the run script directory.
         """
         if file_name == "":
-            raise ValueError("python_execute: empty file name")
+            raise ValueError("Empty Python file name")
         path = Path(file_name)
         if not path.is_absolute():
             path = self._base_dir / path
@@ -285,29 +360,59 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
                 namespace["__file__"] = previous_file
 
     # ------------------------------------------------------------------
-    # python_call arguments
+    # eval
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def bits_to_int(bits, is_signed):
+    def evaluate(self, text, kind, width):
         """
-        Convert the image of a signed/unsigned value (MSB first) to an int.
+        Evaluate a Python expression in the session namespace and convert the
+        value to the VHDL type given by kind.
 
-        'L' and 'H' are treated as '0' and '1' like numeric_std's TO_01;
-        other metavalues cannot be converted.
+        :param width: Width of a std_ulogic_vector/signed/unsigned result, -1 if not given by VHDL.
+        :returns: (integer, real, data bytes, metadata tuple)
         """
-        normalized = bits.replace("L", "0").replace("H", "1")
-        if normalized == "":
-            raise ValueError(f"Cannot convert a null {'signed' if is_signed else 'unsigned'} value to a Python int")
-        if not set(normalized) <= {"0", "1"}:
-            raise ValueError(
-                f"Cannot convert {'signed' if is_signed else 'unsigned'} value \"{bits}\" "
-                "containing metavalues to a Python int"
-            )
-        value = int(normalized, 2)
-        if is_signed and normalized[0] == "1":
-            value -= 1 << len(normalized)
+        self._result = _NO_VALUE
+        self._array_meta = {}
+        self._eval_count += 1
+        file_name = self._source_name("eval", self._eval_count)
+        try:
+            # Make tracebacks show the source lines of the expression
+            linecache.cache[file_name] = (len(text), None, text.splitlines(True), file_name)
+            code = compile(text, file_name, "eval", dont_inherit=True)
+            # Running the user's own Python code is the purpose of this module
+            self._result = eval(code, self._namespace, self._namespace)  # pylint: disable=eval-used
+        except BaseException:
+            self._array_meta = {}
+            self._flush()
+            raise
+        self._flush()
+        return self.convert_result(kind, width)
+
+    # ------------------------------------------------------------------
+    # Values transferred from VHDL
+    # ------------------------------------------------------------------
+
+    def staged(self, staged_id):
+        """
+        The value staged under an id, used from Python as __vunit__.staged(id).
+        """
+        value, bit_width, is_signed = self._staged.get(staged_id)
+        numpy = sys.modules.get("numpy")
+        if numpy is not None and isinstance(value, numpy.ndarray):
+            # An expression returning this very array keeps its word size
+            self._array_meta[id(value)] = (value, bit_width, is_signed)
         return value
+
+    def stage_value(self, value):
+        """
+        Stage a value transferred from VHDL and return its id.
+        """
+        meta = self._array_meta.get(id(value))
+        if meta is not None and meta[0] is value:
+            bit_width, is_signed = meta[1], meta[2]
+        else:
+            bit_width, is_signed = 32, True
+        return self._staged.stage(value, bit_width, is_signed)
 
     @staticmethod
     def _numpy():
@@ -339,7 +444,7 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         self, storage, length, width, height, depth, bit_width, is_signed
     ):  # pylint: disable=too-many-arguments,too-many-positional-arguments
         """
-        Create the NumPy array for an integer_array_t argument. The bridge
+        Create the NumPy array for an integer_array_t value. The bridge
         fills the storage (native int32) after this call returns.
         """
         numpy = self._numpy()
@@ -348,60 +453,12 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         return array
 
     # ------------------------------------------------------------------
-    # python_call
+    # Results
     # ------------------------------------------------------------------
-
-    def _resolve_function(self, name):
-        """
-        Look up a (dotted) function name in the namespace or among the builtins.
-        """
-        parts = name.split(".")
-        if not all(part.isidentifier() for part in parts):
-            raise ValueError(f"python_call: {name!r} is not a valid Python function name")
-
-        if parts[0] in self._namespace:
-            obj = self._namespace[parts[0]]
-        elif hasattr(builtins, parts[0]):
-            obj = getattr(builtins, parts[0])
-        else:
-            raise NameError(f"Python function {name!r} is not defined. Define it with python_execute first.")
-
-        for part in parts[1:]:
-            obj = getattr(obj, part)
-
-        if not callable(obj):
-            raise TypeError(f"python_call: {name!r} is not callable (it is a {_type_name(obj)})")
-        return obj
-
-    def call(self, name, args):
-        """
-        Call a function in the namespace. The result is kept until converted.
-        """
-        self._result = _NO_VALUE
-        self._function_name = name
-        keywords = self._keywords.take()
-        try:
-            function = self._resolve_function(name)
-            self._result = function(*args, **keywords)
-        except BaseException:
-            self._array_meta.clear()
-            raise
-        finally:
-            self._flush()
-
-    # ------------------------------------------------------------------
-    # python_call results
-    # ------------------------------------------------------------------
-
-    def _type_error(self, kind, value, expected):
-        return TypeError(
-            f"python_call({self._function_name!r}): cannot return Python {_type_name(value)} "
-            f"({value!r:.200}) as VHDL {VHDL_TYPE_NAMES[kind]}; expected {expected}"
-        )
 
     def convert_result(self, kind, width):
         """
-        Convert the result of the last call to the VHDL type given by kind.
+        Convert the value of the last evaluation to the VHDL type given by kind.
 
         :param width: Width of a std_ulogic_vector/signed/unsigned result, -1 if not given by VHDL.
         :returns: (integer, real, data bytes, metadata tuple)
@@ -411,7 +468,7 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         array_meta = self._array_meta
         self._array_meta = {}
         if value is _NO_VALUE:
-            raise RuntimeError("Internal error: no Python call result available")
+            raise RuntimeError("Internal error: no Python result available")
 
         converters = {
             KIND_INTEGER: self._integer_result,
@@ -422,6 +479,8 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
             KIND_STD_ULOGIC_VECTOR: self._std_ulogic_vector_result,
             KIND_SIGNED: self._bits_result,
             KIND_UNSIGNED: self._bits_result,
+            KIND_INTEGER_VECTOR: self._integer_vector_result,
+            KIND_REAL_VECTOR: self._real_vector_result,
         }
         if kind == KIND_INTEGER_ARRAY:
             return self._array_result(value, array_meta)
@@ -429,67 +488,67 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
             raise RuntimeError(f"Internal error: unknown result kind {kind}")
         return converters[kind](kind, value, width)
 
-    def _integer_result(self, kind, value, _width):
+    @staticmethod
+    def _integer_result(kind, value, _width):
         """
         Convert an int result.
         """
-        if _is_bool(value) or not isinstance(value, numbers.Integral):
-            raise self._type_error(kind, value, "int")
+        if not _is_integer(value):
+            raise _type_error(kind, value, "int")
         value = int(value)
         if not INTEGER_LOW <= value <= INTEGER_HIGH:
-            raise OverflowError(
-                f"python_call({self._function_name!r}): {value} is outside the range of VHDL integer "
-                f"({INTEGER_LOW} to {INTEGER_HIGH})"
-            )
+            raise OverflowError(f"{value} is outside the range of VHDL integer ({INTEGER_LOW} to {INTEGER_HIGH})")
         return (value, 0.0, b"", ())
 
-    def _real_result(self, kind, value, _width):
+    @staticmethod
+    def _real_result(kind, value, _width):
         """
-        Convert a float (or int) result.
+        Convert a float result. An int is not a float, like in Python's C API.
         """
-        if _is_bool(value) or not isinstance(value, numbers.Real):
-            raise self._type_error(kind, value, "float (or int)")
+        if not _is_float(value):
+            raise _type_error(kind, value, "float")
         result = float(value)
         if not math.isfinite(result):
-            raise ValueError(f"python_call({self._function_name!r}): {result} cannot be represented as VHDL real")
+            raise ValueError(f"{result} cannot be represented as VHDL real")
         return (0, result, b"", ())
 
-    def _boolean_result(self, kind, value, _width):
+    @staticmethod
+    def _boolean_result(kind, value, _width):
         """
         Convert a bool result.
         """
         if not _is_bool(value):
-            raise self._type_error(kind, value, "bool")
+            raise _type_error(kind, value, "bool")
         return (int(bool(value)), 0.0, b"", ())
 
-    def _string_result(self, kind, value, _width):
+    @staticmethod
+    def _string_result(kind, value, _width):
         """
         Convert a str result to UTF-8.
         """
         if not isinstance(value, str):
-            raise self._type_error(kind, value, "str")
+            raise _type_error(kind, value, "str")
         data = _encode(value)
         return (0, 0.0, data, (len(data),))
 
-    def _std_ulogic_result(self, kind, value, _width):
+    @staticmethod
+    def _std_ulogic_result(kind, value, _width):
         """
         Convert a one character str result.
         """
         if not isinstance(value, str) or len(value) != 1 or value not in STD_ULOGIC_VALUES:
-            raise self._type_error(kind, value, "a one character str, one of 'UX01ZWLH-'")
+            raise _type_error(kind, value, "a one character str, one of 'UX01ZWLH-'")
         return (0, 0.0, value.encode("ascii"), (1,))
 
-    def _std_ulogic_vector_result(self, kind, value, width):
+    @staticmethod
+    def _std_ulogic_vector_result(kind, value, width):
         """
         Convert a str result, one character per element.
         """
         if not isinstance(value, str) or not STD_ULOGIC_VALUES.issuperset(value):
-            raise self._type_error(kind, value, "a str of the characters 'UX01ZWLH-'")
+            raise _type_error(kind, value, "a str of the characters 'UX01ZWLH-'")
         if width >= 0 and len(value) != width:
-            raise ValueError(
-                f"python_call({self._function_name!r}): returned {len(value)} std_ulogic values "
-                f"but the VHDL result has length {width}"
-            )
+            raise ValueError(f"Got {len(value)} std_ulogic values but the VHDL result has length {width}")
         return (0, 0.0, value.encode("ascii"), (len(value),))
 
     def _bits_result(self, kind, value, width):
@@ -499,12 +558,13 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         data = self._int_to_bits(kind, value, width)
         return (0, 0.0, data, (len(data),))
 
-    def _int_to_bits(self, kind, value, width):
+    @staticmethod
+    def _int_to_bits(kind, value, width):
         """
         Two's complement/binary image of an int, checked to fit width.
         """
-        if _is_bool(value) or not isinstance(value, numbers.Integral):
-            raise self._type_error(kind, value, "int")
+        if not _is_integer(value):
+            raise _type_error(kind, value, "int")
         value = int(value)
         is_signed = kind == KIND_SIGNED
         if is_signed:
@@ -512,13 +572,61 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         else:
             low, high = 0, (1 << width) - 1
         if not low <= value <= high:
-            raise OverflowError(
-                f"python_call({self._function_name!r}): {value} does not fit in a "
-                f"{width} bit {VHDL_TYPE_NAMES[kind]} ({low} to {high})"
-            )
+            raise OverflowError(f"{value} does not fit in a {width} bit {VHDL_TYPE_NAMES[kind]} ({low} to {high})")
         if width == 0:
             return b""
         return format(value & ((1 << width) - 1), f"0{width}b").encode("ascii")
+
+    @staticmethod
+    def _sequence(kind, value):
+        """
+        The elements of a list/tuple result. Nothing else is accepted, like in
+        the other python_ffi_pkg implementations.
+        """
+        if not isinstance(value, (list, tuple)):
+            raise _type_error(kind, value, "a list or tuple")
+        return value
+
+    def _integer_vector_result(self, kind, value, _width):
+        """
+        Convert a list/tuple of int to integer_vector data (native int32).
+        """
+        values = self._sequence(kind, value)
+        integers = []
+        for index, element in enumerate(values):
+            if not _is_integer(element):
+                raise TypeError(
+                    f"Cannot convert element {index} of the Python {_type_name(value)}, "
+                    f"a {_type_name(element)} ({element!r:.100}), to a VHDL integer; expected int"
+                )
+            element = int(element)
+            if not INTEGER_LOW <= element <= INTEGER_HIGH:
+                raise OverflowError(
+                    f"Element {index} ({element}) is outside the range of VHDL integer "
+                    f"({INTEGER_LOW} to {INTEGER_HIGH})"
+                )
+            integers.append(element)
+        data = struct.pack(f"={len(integers)}i", *integers)
+        return (0, 0.0, data, (len(integers),))
+
+    def _real_vector_result(self, kind, value, _width):
+        """
+        Convert a list/tuple of float to real_vector data (native float64).
+        """
+        values = self._sequence(kind, value)
+        reals = []
+        for index, element in enumerate(values):
+            if not _is_float(element):
+                raise TypeError(
+                    f"Cannot convert element {index} of the Python {_type_name(value)}, "
+                    f"a {_type_name(element)} ({element!r:.100}), to a VHDL real; expected float"
+                )
+            element = float(element)
+            if not math.isfinite(element):
+                raise ValueError(f"Element {index} ({element}) cannot be represented as VHDL real")
+            reals.append(element)
+        data = struct.pack(f"={len(reals)}d", *reals)
+        return (0, 0.0, data, (len(reals),))
 
     _DTYPE_WORD_SIZE = {
         # dtype.str without byte order: (bit_width, is_signed)
@@ -544,7 +652,7 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
             minimum, maximum = int(value.min()), int(value.max())
             if minimum < low or maximum > high:
                 raise OverflowError(
-                    f"python_call({self._function_name!r}): array values ({minimum} to {maximum}) do not fit in "
+                    f"The array values ({minimum} to {maximum}) do not fit in "
                     f"the integer_array_t word size ({bit_width} bit {'signed' if is_signed else 'unsigned'}, "
                     f"{low} to {high})"
                 )
@@ -555,24 +663,25 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         data = numpy.ascontiguousarray(value, dtype=numpy.int32).tobytes()
         return (0, 0.0, data, (value.size, width, height, depth, bit_width, int(is_signed)))
 
-    def _integer_ndarray(self, numpy, value):
+    @staticmethod
+    def _integer_ndarray(numpy, value):
         """
         The result as an integer NumPy array with 1 to 3 dimensions.
         """
         if not isinstance(value, numpy.ndarray):
             if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
-                raise self._type_error(KIND_INTEGER_ARRAY, value, "a NumPy array of integers")
+                raise _type_error(KIND_INTEGER_ARRAY, value, "a NumPy array of integers")
             value = numpy.asarray(value)
 
         if value.dtype.kind not in "biu":
             raise TypeError(
-                f"python_call({self._function_name!r}): cannot return a NumPy array of dtype {value.dtype} "
-                "as VHDL integer_array_t; expected an integer or boolean dtype"
+                f"Cannot convert a NumPy array of dtype {value.dtype} to a VHDL integer_array_t; "
+                "expected an integer or boolean dtype"
             )
         if value.ndim not in (1, 2, 3):
             raise ValueError(
-                f"python_call({self._function_name!r}): cannot return a {value.ndim}-dimensional NumPy array "
-                "as VHDL integer_array_t; expected 1, 2 or 3 dimensions"
+                f"Cannot convert a {value.ndim}-dimensional NumPy array to a VHDL integer_array_t; "
+                "expected 1, 2 or 3 dimensions"
             )
         return value
 
@@ -582,7 +691,7 @@ class Runtime:  # pylint: disable=too-many-instance-attributes
         """
         meta = array_meta.get(id(original))
         if meta is not None and meta[0] is original and meta[1] >= 1:
-            # The function returned (possibly modified in place) one of its
-            # integer_array_t arguments: keep its bit width and signedness.
+            # The expression returned (possibly modified in place) one of the
+            # integer_array_t values VHDL staged: keep its bit width and signedness.
             return meta[1], meta[2]
         return self._DTYPE_WORD_SIZE.get(value.dtype.str[1:], (32, True))
