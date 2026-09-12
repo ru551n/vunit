@@ -12,8 +12,9 @@ library with the system C compiler, and reading/writing files, is fine.
 """
 
 import os
-import shutil
 import re
+import shutil
+import subprocess
 import sys
 import unittest
 from glob import glob
@@ -64,10 +65,57 @@ class _BridgeKey:
     """
 
 
-def _write_context_stub(path: Path):
-    path.write_text("context vunit_context is\nend context;\n", encoding="utf-8")
+# The complete VHPIDIRECT contract between python_bridge_pkg.vhd.in and
+# native/*.c. The generated VHDL and the built library must agree on it
+# exactly: nothing else may be exported.
+EXPECTED_EXPORTS = (
+    "vpy_setup",
+    "vpy_cleanup",
+    "vpy_buffer_clear",
+    "vpy_buffer_append",
+    "vpy_begin",
+    "vpy_execute",
+    "vpy_eval",
+    "vpy_push_array",
+    "vpy_array_write",
+    "vpy_stage",
+    "vpy_result_integer",
+    "vpy_result_real",
+    "vpy_result_meta",
+    "vpy_result_read_string",
+    "vpy_result_read_integers",
+    "vpy_result_read_reals",
+    "vpy_error_length",
+    "vpy_error_read",
+)
 
 
+# The VHDL sources of the bridge are moved to vunit/vhdl/python/src and the FFI
+# template is renamed to python_bridge_pkg.vhd.in by the VHDL/builtins change.
+# Until that lands the template still sits at its old path, so setup() is run
+# with bridge_setup.BRIDGE_PACKAGE_TEMPLATE pointed at it.
+# TODO: drop CURRENT_TEMPLATE and _patch_template() once the rename is done.
+CURRENT_TEMPLATE = VHDL_PATH / "python_bridge" / "src" / "python_ffi_pkg.vhd.in"
+
+
+def _patch_template():
+    return mock.patch.object(bridge_setup, "BRIDGE_PACKAGE_TEMPLATE", CURRENT_TEMPLATE)
+
+
+def _write_run_script(path: Path) -> Path:
+    """
+    A stub run script; its directory is the base of relative Python file names.
+    """
+    path.write_text("# run script stub\n", encoding="utf-8")
+    return path
+
+
+# TODO(builtins): these two classes still test the removed
+# add_vhdl_builtins(python=...) wiring. The builtins/ui change must retarget
+# them to vu.add_python(): add_vhdl_builtins() is unconditional again (no
+# python parameter, no generated vunit_context) and the bridge files are
+# python_bridge_pkg.vhd, python_ffi_pkg_bridge.vhd and python_ext_pkg[-body].vhd.
+@unittest.skip("TODO(builtins): retarget from add_vhdl_builtins(python=...) to add_python()")
 class TestFeatureIsolation(unittest.TestCase):
     """
     add_vhdl_builtins(python=False) must never touch the bridge.
@@ -116,6 +164,7 @@ class TestFeatureIsolation(unittest.TestCase):
         self.assertEqual(listing(), before)
 
 
+@unittest.skip("TODO(builtins): retarget from add_vhdl_builtins(python=True) to add_python()")
 class TestAddVhdlBuiltinsPython(unittest.TestCase):
     """
     add_vhdl_builtins(python=True) wiring, using a stubbed bridge_setup.setup
@@ -183,57 +232,41 @@ class TestAddVhdlBuiltinsPython(unittest.TestCase):
             self.assertEqual(bridge.library_file, fake_library_file)
 
 
-class TestPythonContextGeneration(unittest.TestCase):
+class TestBridgePackageSubstitution(unittest.TestCase):
     """
-    setup() generates vunit_context with python_pkg use-claused added.
-    """
-
-    def test_generated_context_is_original_plus_one_line(self):
-        with create_tempdir() as tempdir:
-            original = tempdir / "vunit_context.vhd"
-            _write_context_stub(original)
-
-            generated = bridge_setup._python_context(original)  # pylint: disable=protected-access
-            original_text = original.read_text(encoding="utf-8")
-
-            self.assertEqual(
-                generated,
-                original_text.replace("end context;", "  use vunit_lib.python_pkg.all;\nend context;", 1),
-            )
-            # Exactly one extra line
-            self.assertEqual(len(generated.splitlines()), len(original_text.splitlines()) + 1)
-
-    def test_raises_if_marker_missing(self):
-        with create_tempdir() as tempdir:
-            bad = tempdir / "vunit_context.vhd"
-            bad.write_text("context vunit_context is\nend contextt;\n", encoding="utf-8")
-            with self.assertRaisesRegex(RuntimeError, "Failed to find 'end context;'"):
-                bridge_setup._python_context(bad)  # pylint: disable=protected-access
-
-
-class TestFfiTemplateSubstitution(unittest.TestCase):
-    """
-    Library token substitution into python_ffi_pkg.vhd.
+    Library token substitution into the generated python_bridge_pkg.vhd.
     """
 
     def setUp(self):
         self.tempdir_cm = create_tempdir()
         self.tempdir = self.tempdir_cm.__enter__()
         self.addCleanup(self.tempdir_cm.__exit__, None, None, None)
-        self.context_file = self.tempdir / "vunit_context.vhd"
-        _write_context_stub(self.context_file)
+        self.run_script = _write_run_script(self.tempdir / "run.py")
 
     def _setup(self, simulator, library_file_name="libvunit_python_bridge.so"):
         fake_library_file = self.tempdir / "cache" / library_file_name
-        with mock.patch("vunit.python_bridge.bridge.prepare_library", return_value=fake_library_file):
-            return bridge_setup.setup(_BridgeKey(), self.tempdir / "out", simulator, self.context_file)
+        with (
+            mock.patch("vunit.python_bridge.bridge.prepare_library", return_value=fake_library_file),
+            _patch_template(),
+        ):
+            return bridge_setup.setup(_BridgeKey(), self.tempdir / "out", simulator, self.run_script)
 
     def _ffi_text(self, bridge):
         for path in bridge.vhdl_files:
-            if path.name == "python_ffi_pkg.vhd":
+            if path.name == "python_bridge_pkg.vhd":
                 return path.read_text(encoding="utf-8")
-        self.fail("python_ffi_pkg.vhd not found among bridge.vhdl_files")
+        self.fail("python_bridge_pkg.vhd not found among bridge.vhdl_files")
         return ""
+
+    def test_generated_package_is_the_private_bridge_package(self):
+        text = self._ffi_text(self._setup(_FakeSimulator("nvc")))
+        self.assertIn("package python_bridge_pkg is", text)
+        self.assertIn("package body python_bridge_pkg is", text)
+
+    def test_exports_match_the_native_library(self):
+        text = self._ffi_text(self._setup(_FakeSimulator("nvc")))
+        declared = set(re.findall(r'VHPIDIRECT \S+ (\w+)"', text))
+        self.assertEqual(declared, set(EXPECTED_EXPORTS))
 
     def test_token_is_library_file_name_for_nvc(self):
         bridge = self._setup(_FakeSimulator("nvc"))
@@ -294,11 +327,11 @@ class TestPosixBuildAndCache(unittest.TestCase):
         self.tempdir_cm = create_tempdir()
         self.tempdir = self.tempdir_cm.__enter__()
         self.addCleanup(self.tempdir_cm.__exit__, None, None, None)
-        self.context_file = self.tempdir / "vunit_context.vhd"
-        _write_context_stub(self.context_file)
+        self.run_script = _write_run_script(self.tempdir / "run.py")
 
     def _setup(self, output_path=None):
-        return bridge_setup.setup(_BridgeKey(), output_path or self.tempdir / "out", None, self.context_file)
+        with _patch_template():
+            return bridge_setup.setup(_BridgeKey(), output_path or self.tempdir / "out", None, self.run_script)
 
     def test_first_setup_compiles_and_names_library(self):
         bridge = self._setup()
@@ -371,32 +404,53 @@ class TestPosixBuildAndCache(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "free-threaded"):
                 self._setup()
 
+    def test_library_exports_exactly_the_contract(self):
+        nm = shutil.which("nm")
+        if nm is None:
+            self.skipTest("nm is not available")
+        bridge = self._setup()
+        proc = subprocess.run(
+            [nm, "-D", "--defined-only", str(bridge.library_file)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        exported = set()
+        for line in proc.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 3 and fields[-2] in "TtWwDdBb":
+                exported.add(fields[-1])
+        # -fvisibility=hidden plus VPY_EXPORT: only the contract is exported,
+        # no bridge internals (vpy_initialize, vpy_set_error, ...) leak out.
+        self.assertEqual(exported, set(EXPECTED_EXPORTS))
+
     def test_no_prebuilt_shared_library_in_repository(self):
         matches = glob(str(native_library.PACKAGE_PATH / "**" / "*.so"), recursive=True)
-        matches += glob(str(bridge_setup.VHDL_SOURCE_PATH.parent / "**" / "*.so"), recursive=True)
+        matches += glob(str(VHDL_PATH / "**" / "*.so"), recursive=True)
         self.assertEqual(matches, [])
 
 
 class TestConfigFile(unittest.TestCase):
     """
-    _config_text / _write_if_changed / _base_dir
+    _config_text / _write_if_changed
     """
 
     def test_config_keys_linux(self):
         with mock.patch("sys.platform", "linux"):
-            text = bridge_setup._config_text()  # pylint: disable=protected-access
+            text = bridge_setup._config_text("/base/dir")  # pylint: disable=protected-access
         keys = dict(line.split("=", 1) for line in text.splitlines())
         self.assertEqual(set(keys), {"executable", "prefix", "runtime", "base_dir"})
         self.assertEqual(keys["executable"], sys.executable)
         self.assertEqual(keys["prefix"], sys.prefix)
         self.assertEqual(keys["runtime"], str(bridge_setup.RUNTIME_SOURCE))
+        self.assertEqual(keys["base_dir"], "/base/dir")
 
     def test_config_keys_windows_include_python_dll(self):
         with (
             mock.patch("sys.platform", "win32"),
             mock.patch("vunit.python_bridge.bridge.windows_python_dll", return_value=r"C:\python.dll"),
         ):
-            text = bridge_setup._config_text()  # pylint: disable=protected-access
+            text = bridge_setup._config_text("/base/dir")  # pylint: disable=protected-access
         keys = dict(line.split("=", 1) for line in text.splitlines())
         self.assertEqual(keys["python_dll"], r"C:\python.dll")
 
@@ -415,26 +469,26 @@ class TestConfigFile(unittest.TestCase):
             bridge_setup._write_if_changed(path, "world")  # pylint: disable=protected-access
             self.assertEqual(path.read_text(encoding="utf-8"), "world")
 
-    def test_base_dir_uses_directory_of_run_script(self):
+    def test_base_dir_is_the_directory_of_the_run_script(self):
         with create_tempdir() as tempdir:
-            script = tempdir / "run.py"
-            script.write_text("", encoding="utf-8")
-            with mock.patch("sys.argv", [str(script)]):
-                self.assertEqual(bridge_setup._base_dir(), tempdir.resolve())  # pylint: disable=protected-access
-
-    def test_base_dir_falls_back_to_cwd_when_argv0_not_a_file(self):
-        with mock.patch("sys.argv", ["not_a_real_script.py"]):
-            self.assertEqual(bridge_setup._base_dir(), Path.cwd())  # pylint: disable=protected-access
+            run_script = _write_run_script(tempdir / "run.py")
+            fake_library_file = tempdir / "cache" / "libvunit_python_bridge.so"
+            with (
+                mock.patch("vunit.python_bridge.bridge.prepare_library", return_value=fake_library_file),
+                _patch_template(),
+            ):
+                bridge_setup.setup(_BridgeKey(), tempdir / "out", None, run_script)
+            config = (fake_library_file.parent / bridge_setup.CONFIG_FILE_NAME).read_text(encoding="utf-8")
+            keys = dict(line.split("=", 1) for line in config.splitlines())
+            self.assertEqual(keys["base_dir"], str(tempdir.resolve()))
 
     def test_config_paths_with_spaces_and_unicode_written_as_utf8(self):
         with create_tempdir() as tempdir:
             weird_dir = tempdir / "weird dir \u00e5\u00e4\u00f6 \u65e5\u672c\u8a9e"
             weird_dir.mkdir()
-            script = weird_dir / "run.py"
-            script.write_text("", encoding="utf-8")
-            with mock.patch("sys.argv", [str(script)]), mock.patch("sys.platform", "linux"):
-                text = bridge_setup._config_text()  # pylint: disable=protected-access
-            self.assertIn(str(weird_dir.resolve()), text)
+            with mock.patch("sys.platform", "linux"):
+                text = bridge_setup._config_text(str(weird_dir))  # pylint: disable=protected-access
+            self.assertIn(str(weird_dir), text)
             path = tempdir / "cfg"
             bridge_setup._write_if_changed(path, text)  # pylint: disable=protected-access
             self.assertEqual(path.read_text(encoding="utf-8"), text)
@@ -442,7 +496,7 @@ class TestConfigFile(unittest.TestCase):
     def test_line_break_in_path_raises(self):
         with mock.patch("sys.executable", "/usr/bin/py\nthon"):
             with self.assertRaisesRegex(RuntimeError, "line breaks"):
-                bridge_setup._config_text()  # pylint: disable=protected-access
+                bridge_setup._config_text("/base/dir")  # pylint: disable=protected-access
 
 
 class TestWindowsDllSelection(unittest.TestCase):

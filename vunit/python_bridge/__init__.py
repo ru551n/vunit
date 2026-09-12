@@ -6,13 +6,14 @@
 
 
 """
-VHDL-to-Python bridge enabled by ``add_vhdl_builtins(python=True)``.
+VHDL-to-Python bridge enabled by ``add_python()``.
 
-The bridge is a small C library (native/*.c) that embeds
-CPython in the simulator process and is called from VHDL through VHPIDIRECT
-foreign subprograms. Modules:
+The bridge is a small C library (native/*.c) that embeds CPython in the
+simulator process and is called from VHDL through VHPIDIRECT foreign
+subprograms. It is the NVC/GHDL implementation of ``python_ffi_pkg``, the
+private engine below the public ``python_pkg`` API. Modules:
 
-* bridge: setup of a project (called by add_vhdl_builtins).
+* bridge: setup of a project (called by add_python).
 * native_library: compiles and caches the library on Linux, selects the
   prebuilt DLL on Windows.
 * simulator_hooks: makes NVC and GHDL find the library.

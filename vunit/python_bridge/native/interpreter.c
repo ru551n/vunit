@@ -247,6 +247,9 @@ int vpy_initialize(void) {
   return status;
 }
 
+/* Whether the interpreter and the runtime are ready to be used. */
+int vpy_is_initialized(void) { return g_state == STATE_READY; }
+
 /*
  * Common start of the entry points that use Python after vpy_begin: fail if
  * the bridge is not initialized, else take the GIL.

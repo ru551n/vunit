@@ -24,8 +24,8 @@ from .native_library import (
 )
 
 RUNTIME_SOURCE = PACKAGE_PATH / "runtime.py"
-VHDL_SOURCE_PATH = PACKAGE_PATH.parent / "vhdl" / "python_bridge" / "src"
-FFI_PACKAGE_TEMPLATE = VHDL_SOURCE_PATH / "python_ffi_pkg.vhd.in"
+VHDL_SOURCE_PATH = PACKAGE_PATH.parent / "vhdl" / "python" / "src"
+BRIDGE_PACKAGE_TEMPLATE = VHDL_SOURCE_PATH / "python_bridge_pkg.vhd.in"
 CONFIG_FILE_NAME = "vunit_python_bridge.cfg"
 
 SUPPORTED_SIMULATORS = ("nvc", "ghdl")
@@ -52,39 +52,45 @@ class PythonBridge:
         return self.library_file.parent
 
 
-def setup(project, output_path: str, simulator_class, vunit_context_file: Path) -> PythonBridge:
+def setup(project, output_path: str, simulator_class, run_script_path: Path) -> PythonBridge:
     """
-    Prepare the Python bridge for a project. Called by add_vhdl_builtins(python=True).
+    Prepare the Python bridge for a project. Called by add_python().
 
+    :param run_script_path: The run script. Its directory is the base of
+                            relative Python file names, like for import_run_script.
     :returns: The bridge. Its vhdl_files are to be added to vunit_lib.
     """
     simulator_name = None if simulator_class is None else simulator_class.name
     if simulator_name is not None and simulator_name not in SUPPORTED_SIMULATORS:
         raise PythonBridgeError(
-            f"VHDL Python support (add_vhdl_builtins(python=True)) requires NVC or GHDL, "
-            f"it is not supported for {simulator_name}"
+            f"VHDL Python support (add_python()) requires NVC or GHDL, " f"it is not supported for {simulator_name}"
         )
 
     check_python_build()
 
     root = Path(output_path) / "python_bridge"
     library_file = prepare_library(root)
-    _write_if_changed(library_file.parent / CONFIG_FILE_NAME, _config_text())
+    base_dir = str(Path(run_script_path).resolve().parent)
+    _write_if_changed(library_file.parent / CONFIG_FILE_NAME, _config_text(base_dir))
 
     if simulator_name == "ghdl" and _ghdl_backend(simulator_class) in GHDL_LINKING_BACKENDS:
         library_token = "-lvunit_python_bridge"
     else:
         library_token = library_file.name
 
-    vhdl_path = root / "vhdl"
-    ffi_package = vhdl_path / "python_ffi_pkg.vhd"
-    _write_if_changed(ffi_package, FFI_PACKAGE_TEMPLATE.read_text(encoding="utf-8").replace("{library}", library_token))
-    context = vhdl_path / "vunit_context.vhd"
-    _write_if_changed(context, _python_context(vunit_context_file))
+    bridge_package = root / "vhdl" / "python_bridge_pkg.vhd"
+    _write_if_changed(
+        bridge_package, BRIDGE_PACKAGE_TEMPLATE.read_text(encoding="utf-8").replace("{library}", library_token)
+    )
 
     bridge = PythonBridge(
         library_file,
-        [ffi_package, VHDL_SOURCE_PATH / "python_pkg.vhd", VHDL_SOURCE_PATH / "python_pkg-body.vhd", context],
+        [
+            bridge_package,
+            VHDL_SOURCE_PATH / "python_ffi_pkg_bridge.vhd",
+            VHDL_SOURCE_PATH / "python_ext_pkg.vhd",
+            VHDL_SOURCE_PATH / "python_ext_pkg-body.vhd",
+        ],
     )
     _BRIDGES[project] = bridge
     return bridge
@@ -97,17 +103,7 @@ def get_bridge(project) -> Optional[PythonBridge]:
     return _BRIDGES.get(project)
 
 
-def _base_dir() -> Path:
-    """
-    Base directory of relative Python file names: the directory of the run script.
-    """
-    script = Path(sys.argv[0]) if sys.argv and sys.argv[0] else None
-    if script is not None and script.is_file():
-        return script.resolve().parent
-    return Path.cwd()
-
-
-def _config_text() -> str:
+def _config_text(base_dir: str) -> str:
     """
     Content of the configuration file read by the bridge library at run time.
     """
@@ -115,7 +111,7 @@ def _config_text() -> str:
         "executable": sys.executable,
         "prefix": sys.prefix,
         "runtime": str(RUNTIME_SOURCE),
-        "base_dir": str(_base_dir()),
+        "base_dir": base_dir,
     }
     if sys.platform == "win32":
         lines["python_dll"] = windows_python_dll()
@@ -123,17 +119,6 @@ def _config_text() -> str:
         if "\n" in value or "\r" in value:
             raise PythonBridgeError(f"VHDL Python support cannot handle line breaks in the path {value!r}")
     return "".join(f"{key}={value}\n" for key, value in lines.items())
-
-
-def _python_context(vunit_context_file: Path) -> str:
-    """
-    vunit_context with python_pkg added, generated from the original to avoid duplication.
-    """
-    text = vunit_context_file.read_text(encoding="utf-8")
-    marker = "end context;"
-    if marker not in text:
-        raise RuntimeError(f"Failed to find '{marker}' in {vunit_context_file!s}")
-    return text.replace(marker, "  use vunit_lib.python_pkg.all;\n" + marker, 1)
 
 
 def _write_if_changed(path: Path, text: str) -> None:
