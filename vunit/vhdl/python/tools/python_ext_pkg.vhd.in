@@ -1,0 +1,56 @@
+$license
+--
+-- VUnit extensions of the Python API, available for the simulators using the
+-- VUnit Python bridge (NVC and GHDL). Make them visible with
+--
+--   use vunit_lib.python_ext_pkg.all;
+--
+-- in addition to context vunit_lib.python_context.
+--
+-- Like the operations of python_pkg, every operation takes the session it is
+-- performed in as its last parameter, defaulting to the default session.
+--
+-- Note that the additional arg and eval overloads make some calls ambiguous:
+-- arg("1010") can be a string, a std_ulogic_vector, a signed or an unsigned
+-- value and needs a qualified expression such as arg(string'("1010")). The
+-- same goes for an eval whose result type is not given by its context, where
+-- the explicit eval_<type> name is the alternative.
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+use work.integer_array_pkg.all;
+use work.integer_vector_ptr_pkg.all;
+use work.python_ffi_pkg.all;
+use work.python_pkg.all;
+
+package python_ext_pkg is
+  -----------------------------------------------------------------------------
+  -- Additional argument values of call
+  -----------------------------------------------------------------------------
+  -- std_ulogic and std_ulogic_vector values become Python strings of the
+  -- characters "UX01ZWLH-", signed and unsigned values become Python ints and
+  -- real_vector and integer_vector_ptr_t values become Python lists. An
+  -- integer_array_t value is transferred to Python and referred to by the
+  -- expression, which means that it can be used in several calls.
+$arg_declarations
+
+  -----------------------------------------------------------------------------
+  -- Additional result types of eval
+  -----------------------------------------------------------------------------
+$eval_declarations
+
+  -----------------------------------------------------------------------------
+  -- Additional result types of call
+  -----------------------------------------------------------------------------
+$call_declarations
+
+  -----------------------------------------------------------------------------
+  -- Execution of Python files
+  -----------------------------------------------------------------------------
+  -- Execute a Python file. A relative file name is relative to the directory
+  -- of the run script. The file is executed with __file__ set and its own
+  -- directory on sys.path so that it can import its siblings.
+  procedure exec_file(file_name : string; session : python_session_t := default_session);
+end package;
