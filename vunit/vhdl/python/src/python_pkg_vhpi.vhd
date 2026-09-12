@@ -8,6 +8,9 @@
 
 use std.textio.all;
 
+use work.integer_array_pkg.all;
+use work.logger_pkg.all;
+
 package python_ffi_pkg is
   -- A session is a named Python namespace. Only the default session, the
   -- __main__ namespace, is supported by this foreign language interface.
@@ -53,6 +56,58 @@ package python_ffi_pkg is
   procedure p_exec(code : string);
   attribute foreign of p_exec : procedure is "VHPI libraries/python exec";
   procedure exec(code : string; session : python_session_t := default_session);
+
+  -----------------------------------------------------------------------------
+  -- Private, the primitives the extensions of python_pkg are built on
+  -----------------------------------------------------------------------------
+  -- The extensions of python_pkg are implemented by the VUnit Python bridge,
+  -- which is only available for NVC and GHDL. The primitives below are
+  -- declared so that python_pkg has one body for every simulator, but they
+  -- report a failure when they are used.
+
+  -- Logger used to report Python errors
+  constant python_logger : logger_t := get_logger("vunit_lib:python");
+
+  -- Result kinds, must match vunit/python_bridge/runtime.py
+  constant p_kind_integer : integer := 0;
+  constant p_kind_real : integer := 1;
+  constant p_kind_boolean : integer := 2;
+  constant p_kind_string : integer := 3;
+  constant p_kind_std_ulogic : integer := 4;
+  constant p_kind_std_ulogic_vector : integer := 5;
+  constant p_kind_signed : integer := 6;
+  constant p_kind_unsigned : integer := 7;
+  constant p_kind_integer_array : integer := 8;
+  constant p_kind_integer_vector : integer := 9;
+  constant p_kind_real_vector : integer := 10;
+
+  -- Name of the operation, used in the error messages
+  function p_eval_operation(expr : string; session : python_session_t := default_session) return string;
+
+  -- Execute the Python file with the given name
+  impure function p_exec_file(
+    file_name : string; session : python_session_t := default_session
+  ) return boolean;
+
+  -- Evaluate expr and convert the value to the VHDL type given by kind. width
+  -- is the length of a std_ulogic_vector, signed or unsigned result, -1 when
+  -- it is not known.
+  impure function p_eval(
+    expr      : string;
+    kind      : integer;
+    width     : integer;
+    operation : string;
+    session   : python_session_t := default_session
+  ) return boolean;
+
+  -- The result of the last evaluation
+  impure function p_result_integer return integer;
+  impure function p_result_string return string;
+  impure function p_result_integer_array return integer_array_t;
+
+  -- Transfer an integer_array_t to Python and return the id it is staged
+  -- under, -1 on failure.
+  impure function p_stage_array(arr : integer_array_t; operation : string) return integer;
 end package;
 
 package body python_ffi_pkg is
@@ -101,5 +156,65 @@ package body python_ffi_pkg is
   begin
     p_check_session(session);
     p_exec(code);
+  end;
+
+  -----------------------------------------------------------------------------
+  -- Private, the primitives the extensions of python_pkg are built on
+  -----------------------------------------------------------------------------
+  procedure p_unsupported(name : string) is
+  begin
+    failure(python_logger, name & " requires NVC or GHDL");
+  end;
+
+  function p_eval_operation(expr : string; session : python_session_t := default_session) return string is
+  begin
+    if session = default_session then
+      return "eval(""" & expr & """)";
+    end if;
+    return "eval(""" & expr & """, session => """ & string(session) & """)";
+  end;
+
+  impure function p_exec_file(
+    file_name : string; session : python_session_t := default_session
+  ) return boolean is
+  begin
+    p_unsupported("exec_file");
+    return false;
+  end;
+
+  impure function p_eval(
+    expr      : string;
+    kind      : integer;
+    width     : integer;
+    operation : string;
+    session   : python_session_t := default_session
+  ) return boolean is
+  begin
+    p_unsupported(operation);
+    return false;
+  end;
+
+  impure function p_result_integer return integer is
+  begin
+    p_unsupported("p_result_integer");
+    return integer'low;
+  end;
+
+  impure function p_result_string return string is
+  begin
+    p_unsupported("p_result_string");
+    return "";
+  end;
+
+  impure function p_result_integer_array return integer_array_t is
+  begin
+    p_unsupported("p_result_integer_array");
+    return null_integer_array;
+  end;
+
+  impure function p_stage_array(arr : integer_array_t; operation : string) return integer is
+  begin
+    p_unsupported(operation);
+    return -1;
   end;
 end package body;

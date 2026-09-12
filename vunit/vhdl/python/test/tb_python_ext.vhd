@@ -4,8 +4,8 @@
 --
 -- Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 --
--- Tests of the VUnit extensions of the Python API and of the Python bridge
--- implementing it for NVC and GHDL. The API that VUnit has in common with
+-- Tests of the VUnit extensions of python_pkg and of the Python bridge
+-- implementing them for NVC and GHDL. The API that VUnit has in common with
 -- upstream is tested by tb_python_pkg.
 
 library ieee;
@@ -15,7 +15,6 @@ use ieee.numeric_std.all;
 library vunit_lib;
 context vunit_lib.vunit_context;
 context vunit_lib.python_context;
-use vunit_lib.python_ext_pkg.all;
 
 entity tb_python_ext is
   generic (runner_cfg : string);
@@ -27,16 +26,12 @@ begin
   main : process
     constant golden : python_session_t := "golden";
     constant fixed_point : python_session_t := "fixed_point";
-    constant min_int64 : signed(63 downto 0) := (63 => '1', others => '0');
-    constant max_uint64 : unsigned(63 downto 0) := (others => '1');
-
     variable arr, arr_b, result : integer_array_t;
     variable ptr : integer_vector_ptr_t;
     variable slv4 : std_ulogic_vector(3 downto 0);
     variable slv9_desc : std_ulogic_vector(8 downto 0) := "UX01ZWLH-";
     variable slv9_asc : std_ulogic_vector(0 to 8) := "UX01ZWLH-";
     variable result_vec9 : std_ulogic_vector(8 downto 0);
-    variable s4 : signed(3 downto 0);
     variable s8 : signed(7 downto 0);
     variable u8 : unsigned(7 downto 0);
     variable discard_int : integer;
@@ -48,10 +43,6 @@ begin
     end;
 
     procedure discard(value : real_vector) is
-    begin
-    end;
-
-    procedure discard(value : arg_t) is
     begin
     end;
 
@@ -215,17 +206,39 @@ begin
       -- Result types
       ---------------------------------------------------------------------
       elsif run("Test the upstream eval and call forms with the extensions visible") then
-        -- The upstream forms keep working with the extensions in scope; only
-        -- string literal arguments need qualification since arg is also
-        -- overloaded for std_ulogic_vector, signed and unsigned.
+        -- The extensions add eval, call, arg and kwarg overloads but must not
+        -- make any upstream form ambiguous, not even a string literal
+        -- argument or an eval whose type comes from the context.
         check_equal(eval("17"), 17);
-        check_equal(eval("3.5"), 3.5);
-        check_equal(call("len", arg(string'("Hello"))), 5);
+        check_equal(eval("3.40282346e38"), 3.40282346e38);
+        check_equal(eval("''"), string'(""));
+        check(eval(to_py_list_str(integer_vector'(-1, 0, 1))) = integer_vector'(-1, 0, 1));
+        check(eval(to_py_list_str(real_vector'(1.5, -0.25))) = real_vector'(1.5, -0.25));
+        ptr := eval(to_py_list_str(integer_vector'(0 => 17)));
+        check_equal(get(ptr, 0), 17);
+        reals := eval("[1.5, -3.6, 9.1]");
+        check_equal(reals(1), -3.6);
+        check_equal(call("len", arg("Hello")), 5);
+        check_equal(call("max", arg(2.1), arg(1.1)), 2.1);
+        check_equal(call("int", arg(true)), 1);
         check_equal(call("round", arg(3.14159), kwarg("ndigits", 3)), 3.142);
         exec("l = [1]");
         call("l.append", arg(2));
         check_equal(eval_integer("l[1]"), 2);
         check_true(eval("'Yes'") = string'("Yes"));
+
+      elsif run("Test eval of a condition") then
+        -- eval_boolean makes the result of eval usable as a condition
+        exec("threshold = 5");
+        if eval("True") then
+          check_true(true);
+        else
+          check_failed("eval(""True"") must be true");
+        end if;
+
+        if eval("threshold > 10") then
+          check_failed("eval(""threshold > 10"") must be false");
+        end if;
 
       elsif run("Test call without arguments") then
         exec("def answer():" + "    return 42");
@@ -272,32 +285,20 @@ begin
         exec("def identity(x):" + "    return x");
         for idx in std_ulogic_characters'range loop
           check_equal(
-            call_std_ulogic("identity", arg(std_ulogic'val(idx - 1))),
+            call_std_ulogic("identity", arg(string'(1 => std_ulogic_characters(idx)))),
             std_ulogic'val(idx - 1)
           );
         end loop;
 
       elsif run("Test std_ulogic_vector round trip with descending range") then
         exec("def identity(x):" + "    return x");
-        result_vec9 := call_std_ulogic_vector("identity", arg(slv9_desc));
+        result_vec9 := call_std_ulogic_vector("identity", arg(to_string(slv9_desc)));
         check_equal(result_vec9, slv9_desc);
 
       elsif run("Test std_ulogic_vector round trip with ascending range") then
         exec("def identity(x):" + "    return x");
-        call_std_ulogic_vector("identity", result_vec9, arg(slv9_asc));
+        call_std_ulogic_vector("identity", result_vec9, arg(to_string(slv9_asc)));
         check_equal(result_vec9, slv9_asc);
-
-      elsif run("Test signed argument round trip including negative and bounds") then
-        exec("def identity(x):" + "    return x");
-        check_equal(integer'(call("identity", arg(to_signed(-128, 8)))), -128);
-        check_equal(integer'(call("identity", arg(to_signed(127, 8)))), 127);
-        check_equal(integer'(call("identity", arg(to_signed(-1, 8)))), -1);
-        check_equal(integer'(call("identity", arg(to_signed(0, 8)))), 0);
-
-      elsif run("Test unsigned argument round trip including bounds") then
-        exec("def identity(x):" + "    return x");
-        check_equal(integer'(call("identity", arg(to_unsigned(0, 8)))), 0);
-        check_equal(integer'(call("identity", arg(to_unsigned(255, 8)))), 255);
 
       elsif run("Test signed and unsigned procedure results including exact bounds") then
         exec("def identity(x):" + "    return x");
@@ -428,19 +429,6 @@ begin
         );
         unmock(python_logger);
 
-      elsif run("Test that a metavalue in a signed argument fails") then
-        exec("def identity(x):" + "    return x");
-        s4 := (3 => '1', 2 => '0', 1 => 'X', 0 => '1');
-        mock(python_logger, failure);
-        discard(arg(s4));
-        check_only_log(
-          python_logger,
-          "arg failed:" & LF &
-          "Cannot convert the signed value ""10X1"" containing metavalues to a Python int",
-          failure
-        );
-        unmock(python_logger);
-
       elsif run("Test that a std_ulogic_vector length mismatch in a procedure result fails") then
         exec("def wrong_length_bits():" + "    return '01011'");
         mock(python_logger, failure);
@@ -470,30 +458,31 @@ begin
       ---------------------------------------------------------------------
       -- Argument values
       ---------------------------------------------------------------------
-      elsif run("Test arg and kwarg of std_ulogic and std_ulogic_vector values") then
-        define_describe;
-        check_equal(call_string("describe", arg(std_ulogic'('Z'))), "'Z'");
-        check_equal(call_string("describe", kwarg("l", std_ulogic'('-'))), "l='-'");
-        check_equal(call_string("describe", arg(slv9_desc)), "'UX01ZWLH-'");
-        check_equal(call_string("describe", arg(slv9_asc)), "'UX01ZWLH-'");
-        check_equal(call_string("describe", kwarg("v", std_ulogic_vector'("10XZ"))), "v='10XZ'");
-
-      elsif run("Test arg and kwarg of signed and unsigned values") then
-        define_describe;
-        check_equal(call_string("describe", arg(to_signed(-3, 4)), arg(to_unsigned(5, 4))), "-3, 5");
-        check_equal(call_string("describe", arg(signed'("LHLH")), arg(unsigned'("HLHL"))), "5, 10");
-        check_equal(call_string("describe", arg(min_int64)), "-9223372036854775808");
-        check_equal(call_string("describe", arg(max_uint64)), "18446744073709551615");
-        check_equal(call_string("describe", kwarg("sgn", to_signed(0, 1))), "sgn=0");
-
       elsif run("Test arg and kwarg of real_vector and integer_vector_ptr values") then
         define_describe;
+        -- An aggregate needs a qualified expression to select the overload
         check_equal(call_string("describe", arg(real_vector'(1.5, -0.25))), "[1.5, -0.25]");
+        check_equal(call_string("describe", kwarg("v", real_vector'(0 => 0.5))), "v=[0.5]");
         ptr := new_integer_vector_ptr(3);
         for idx in 0 to 2 loop
           set(ptr, idx, idx - 1);
         end loop;
+        check_equal(call_string("describe", arg(ptr)), "[-1, 0, 1]");
         check_equal(call_string("describe", kwarg("v", ptr)), "v=[-1, 0, 1]");
+
+      elsif run("Test std_ulogic_vector, signed and unsigned arguments") then
+        -- There are no arg overloads for these types, which would make a
+        -- string literal argument ambiguous. They are passed as a string and
+        -- as an integer instead.
+        define_describe;
+        check_equal(call_string("describe", arg(to_string(slv9_desc))), "'UX01ZWLH-'");
+        check_equal(call_string("describe", kwarg("v", to_string(std_ulogic_vector'("10XZ")))), "v='10XZ'");
+        s8 := to_signed(-128, 8);
+        u8 := to_unsigned(255, 8);
+        check_equal(call_string("describe", arg(to_integer(s8)), arg(to_integer(u8))), "-128, 255");
+        exec("def identity(x):" + "    return x");
+        check_equal(integer'(call("identity", arg(to_integer(s8)))), -128);
+        check_equal(integer'(call("identity", arg(to_integer(u8)))), 255);
 
       elsif run("Test arg and kwarg of integer_array_t values") then
         exec("def total(*args, **kwargs):" + "    return int(sum(a.sum() for a in list(args) + list(kwargs.values())))");

@@ -223,7 +223,7 @@ jobs:
         tar tzf dist/*.tar.gz > content.txt
         for file in python_bridge/bridge.py python_bridge/runtime.py python_bridge/native/bridge.h python_bridge/native/interpreter.c \
                     vhdl/python/src/python_bridge_pkg.vhd.in vhdl/python/src/python_pkg.vhd vhdl/python/src/python_ffi_pkg_bridge.vhd \
-                    vhdl/python/src/python_ext_pkg.vhd vhdl/python/src/python_pkg_fli.c vhdl/python/src/python_pkg_vhpi.vhd \
+                    vhdl/python/src/python_pkg_fli.c vhdl/python/src/python_pkg_vhpi.vhd \
                     python_pkg.py; do
           grep -q "vunit/$file\$" content.txt || { echo "missing $file"; exit 1; }
         done

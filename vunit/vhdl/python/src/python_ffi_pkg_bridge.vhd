@@ -16,8 +16,10 @@
 --     the simulation directly, which makes them observable from VHDL.
 --   * Sessions other than the default one are supported.
 --
--- The p_ prefixed declarations are private building blocks shared with
--- python_ext_pkg. They are not part of the API.
+-- The p_ prefixed declarations are the private primitives the extensions of
+-- python_pkg are built on. They are not part of the API. The FLI and VHPI
+-- variants of this package declare the same primitives and implement them by
+-- reporting a failure.
 
 use work.integer_array_pkg.all;
 use work.logger_pkg.all;
@@ -67,7 +69,7 @@ package python_ffi_pkg is
   alias eval is eval_string[string, python_session_t return string];
 
   -----------------------------------------------------------------------------
-  -- Private, shared with python_ext_pkg
+  -- Private, the primitives the extensions of python_pkg are built on
   -----------------------------------------------------------------------------
   -- Result kinds, must match vunit/python_bridge/runtime.py
   constant p_kind_integer : integer := 0;
@@ -109,6 +111,11 @@ package python_ffi_pkg is
     session   : python_session_t := default_session
   ) return boolean;
 
+  -- Execute the Python file with the given name
+  impure function p_exec_file(
+    file_name : string; session : python_session_t := default_session
+  ) return boolean;
+
   -- Evaluate expr and convert the value to the VHDL type given by kind. width
   -- is the length of a std_ulogic_vector, signed or unsigned result, -1 when
   -- it is not known.
@@ -121,6 +128,7 @@ package python_ffi_pkg is
   ) return boolean;
 
   -- The result of the last evaluation
+  impure function p_result_integer return integer;
   impure function p_result_string return string;
   impure function p_result_integer_vector return integer_vector;
   impure function p_result_real_vector return real_vector;
@@ -222,6 +230,13 @@ package body python_ffi_pkg is
       and p_succeeded(vpy_execute(is_file), operation);
   end;
 
+  impure function p_exec_file(
+    file_name : string; session : python_session_t := default_session
+  ) return boolean is
+  begin
+    return p_exec(file_name, 1, p_exec_file_operation(file_name, session), session);
+  end;
+
   impure function p_eval(
     expr      : string;
     kind      : integer;
@@ -238,6 +253,11 @@ package body python_ffi_pkg is
   -----------------------------------------------------------------------------
   -- Results
   -----------------------------------------------------------------------------
+  impure function p_result_integer return integer is
+  begin
+    return vpy_result_integer;
+  end;
+
   impure function p_result_string return string is
     constant len : natural := vpy_result_meta(0);
     variable result : string(1 to len);
