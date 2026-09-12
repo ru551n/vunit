@@ -7,13 +7,13 @@
 """
 Generate python_pkg.vhd from python_pkg.vhd.in in this directory.
 
-The template holds the upstream python_pkg verbatim, apart from the session
-parameters, plus the VUnit extensions of the API: more argument value types
-for call, more result types for eval and call and execution of Python files.
-The extensions are mostly one overload per type, which is why they are
-generated. They are implemented by the Python bridge (NVC and GHDL) on top of
-the p_ prefixed primitives of python_ffi_pkg, which the FLI and VHPI variants
-of that package implement by reporting a failure.
+The template holds the parts of python_pkg that are written by hand. The
+generated parts are the argument value types of call, the result types of eval
+and call and the execution of Python files. They are mostly one overload per
+type, which is why they are generated. The operations that are implemented by
+the Python bridge (NVC and GHDL only) are built on the p_ prefixed primitives
+of python_ffi_pkg, which the FLI and VHPI variants of that package implement
+by reporting a failure.
 """
 
 from pathlib import Path
@@ -32,7 +32,8 @@ ARG_PARAMETERS = f"{', '.join(ARGS)} : arg_t := null_arg"
 ARG_ACTUALS = ", ".join(ARGS)
 ARG_SIGNATURE = ", ".join(["string"] + ["arg_t"] * len(ARGS) + ["python_session_t"])
 
-# Value types of arg and kwarg, additional to the ones of the upstream API.
+# Value types of arg and kwarg, additional to the ones declared in the
+# template.
 #
 # vhdl:   the VHDL type
 # impure: true when the conversion can fail, which makes the functions impure
@@ -367,7 +368,7 @@ def call_subprograms():
 
 def generate_package():
     """
-    Generate python_pkg, the upstream package with the VUnit extensions.
+    Generate python_pkg from the template and the generated declarations.
     """
     template = (TEMPLATE_PATH / "python_pkg.vhd.in").read_text(encoding="utf-8")
     return Template(template).substitute(
