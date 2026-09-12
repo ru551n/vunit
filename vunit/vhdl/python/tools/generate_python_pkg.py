@@ -32,15 +32,28 @@ ARG_PARAMETERS = f"{', '.join(ARGS)} : arg_t := null_arg"
 ARG_ACTUALS = ", ".join(ARGS)
 ARG_SIGNATURE = ", ".join(["string"] + ["arg_t"] * len(ARGS) + ["python_session_t"])
 
-# Value types of arg and kwarg, additional to the ones of python_pkg.
-# A conversion that can fail makes the functions impure.
-# std_ulogic_vector, signed and unsigned are deliberately not among them: they
-# would make a string literal argument, arg("Hello"), ambiguous. Such values
-# are passed as arg(to_string(slv)) and arg(to_integer(value)).
+# Value types of arg and kwarg, additional to the ones of the upstream API.
+#
+# vhdl:   the VHDL type
+# impure: true when the conversion can fail, which makes the functions impure
+# suffix: appended to the arg and kwarg names, empty for an overload
+# bridge: true when the value is transferred by the Python bridge, which makes
+#         it available for NVC and GHDL only. The other values are built from
+#         the Python source text of the value alone and work on any simulator.
+#
+# The unsigned and signed values are passed to typed names, arg_unsigned and
+# arg_signed, on purpose: plain overloads would make a string literal
+# argument, arg("Hello"), ambiguous since a string literal belongs to every
+# character array type. std_ulogic needs no such name, being a scalar, and
+# std_ulogic_vector is deliberately not among the types at all. Such values
+# are passed as arg(to_string(slv)) and arg_unsigned(unsigned(slv)).
 ARG_VALUES = [
-    ("real_vector", False),
-    ("integer_vector_ptr_t", True),
-    ("integer_array_t", True),
+    dict(vhdl="real_vector", impure=False, suffix="", bridge=False),
+    dict(vhdl="integer_vector_ptr_t", impure=True, suffix="", bridge=False),
+    dict(vhdl="integer_array_t", impure=True, suffix="", bridge=True),
+    dict(vhdl="std_ulogic", impure=True, suffix="", bridge=False),
+    dict(vhdl="unsigned", impure=True, suffix="_unsigned", bridge=False),
+    dict(vhdl="signed", impure=True, suffix="_signed", bridge=False),
 ]
 
 # Result types of eval and call.
@@ -175,29 +188,36 @@ def call_name(result):
 # -------------------------------------------------------------------------
 # arg and kwarg
 # -------------------------------------------------------------------------
-def arg_declarations():
+def arg_declarations(bridge):
     """
-    Declarations of the additional arg and kwarg overloads.
+    Declarations of the additional arg and kwarg subprograms.
     """
     lines = []
-    for value_type, is_impure in ARG_VALUES:
-        purity = "impure " if is_impure else ""
-        lines.append(f"  {purity}function arg(value : {value_type}) return arg_t;")
-        lines.append(f"  {purity}function kwarg(kw : string; value : {value_type}) return arg_t;")
+    for value in ARG_VALUES:
+        if value["bridge"] != bridge:
+            continue
+        purity = "impure " if value["impure"] else ""
+        suffix = value["suffix"]
+        lines.append(f"  {purity}function arg{suffix}(value : {value['vhdl']}) return arg_t;")
+        lines.append(f"  {purity}function kwarg{suffix}(kw : string; value : {value['vhdl']}) return arg_t;")
     return "\n".join(lines)
 
 
-def arg_functions():
+def arg_functions(bridge):
     """
-    Bodies of the additional arg and kwarg overloads. p_arg_value returns an
+    Bodies of the additional arg and kwarg subprograms. p_arg_value returns an
     empty string when the value cannot be converted, having reported it.
     """
     parts = []
-    for value_type, is_impure in ARG_VALUES:
-        purity = "impure " if is_impure else ""
+    for value in ARG_VALUES:
+        if value["bridge"] != bridge:
+            continue
+        purity = "impure " if value["impure"] else ""
+        value_type = value["vhdl"]
+        suffix = value["suffix"]
         for name, parameters, result in [
-            ("arg", f"value : {value_type}", "(p_positional_arg, text)"),
-            ("kwarg", f"kw : string; value : {value_type}", "(kw, text)"),
+            (f"arg{suffix}", f"value : {value_type}", "(p_positional_arg, text)"),
+            (f"kwarg{suffix}", f"kw : string; value : {value_type}", "(kw, text)"),
         ]:
             parts.append(
                 f"""\
@@ -351,10 +371,12 @@ def generate_package():
     """
     template = (TEMPLATE_PATH / "python_pkg.vhd.in").read_text(encoding="utf-8")
     return Template(template).substitute(
-        arg_declarations=arg_declarations(),
+        value_arg_declarations=arg_declarations(bridge=False),
+        value_arg_functions=arg_functions(bridge=False),
+        arg_declarations=arg_declarations(bridge=True),
         eval_declarations=eval_declarations(),
         call_declarations=call_declarations(),
-        arg_functions=arg_functions(),
+        arg_functions=arg_functions(bridge=True),
         eval_subprograms=eval_subprograms(),
         call_subprograms=call_subprograms(),
     )
