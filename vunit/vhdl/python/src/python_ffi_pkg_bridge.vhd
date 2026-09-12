@@ -16,8 +16,8 @@
 --     the simulation directly, which makes them observable from VHDL.
 --   * Sessions other than the default one are supported.
 --
--- The p_ prefixed declarations are the private primitives the extensions of
--- python_pkg are built on. They are not part of the API. The FLI and VHPI
+-- The p_ prefixed declarations are the private primitives the bridge
+-- operations of python_pkg are built on. They are not part of the API. The FLI and VHPI
 -- variants of this package declare the same primitives and implement them by
 -- reporting a failure.
 
@@ -69,7 +69,7 @@ package python_ffi_pkg is
   alias eval is eval_string[string, python_session_t return string];
 
   -----------------------------------------------------------------------------
-  -- Private, the primitives the extensions of python_pkg are built on
+  -- Private, the primitives the bridge operations of python_pkg are built on
   -----------------------------------------------------------------------------
   -- Result kinds, must match vunit/python_bridge/runtime.py
   constant p_kind_integer : integer := 0;

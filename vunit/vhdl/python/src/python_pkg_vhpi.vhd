@@ -58,12 +58,12 @@ package python_ffi_pkg is
   procedure exec(code : string; session : python_session_t := default_session);
 
   -----------------------------------------------------------------------------
-  -- Private, the primitives the extensions of python_pkg are built on
+  -- Private, the primitives the bridge operations of python_pkg are built on
   -----------------------------------------------------------------------------
-  -- The extensions of python_pkg are implemented by the VUnit Python bridge,
-  -- which is only available for NVC and GHDL. The primitives below are
-  -- declared so that python_pkg has one body for every simulator, but they
-  -- report a failure when they are used.
+  -- Some operations of python_pkg are implemented by the VUnit Python
+  -- bridge, which is only available for NVC and GHDL. The primitives below
+  -- are declared so that python_pkg has one body for every simulator, but
+  -- they report a failure when they are used.
 
   -- Logger used to report Python errors
   constant python_logger : logger_t := get_logger("vunit_lib:python");
@@ -159,7 +159,7 @@ package body python_ffi_pkg is
   end;
 
   -----------------------------------------------------------------------------
-  -- Private, the primitives the extensions of python_pkg are built on
+  -- Private, the primitives the bridge operations of python_pkg are built on
   -----------------------------------------------------------------------------
   procedure p_unsupported(name : string) is
   begin

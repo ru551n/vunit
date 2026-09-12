@@ -131,14 +131,13 @@ $value_arg_declarations
   impure function "&"(l, r : arg_t) return arg_t;
 
   -----------------------------------------------------------------------------
-  -- VUnit extensions
+  -- Operations implemented by the Python bridge (NVC and GHDL only)
   -----------------------------------------------------------------------------
-  -- The operations below are VUnit additions to the upstream API. They are
-  -- implemented by the VUnit Python bridge and are therefore only available
-  -- for NVC and GHDL; the other simulators report a failure when they are
-  -- used. Like the upstream operations, every one of them takes the session
-  -- it is performed in as its last parameter, defaulting to the default
-  -- session.
+  -- The operations below are implemented by the VUnit Python bridge and are
+  -- therefore only available for NVC and GHDL; the other simulators report a
+  -- failure when they are used. Like the other operations, every one of them
+  -- takes the session it is performed in as its last parameter, defaulting to
+  -- the default session.
 
   -----------------------------------------------------------------------------
   -- Additional argument values of call
@@ -575,7 +574,7 @@ $value_arg_functions
   end;
 
   -----------------------------------------------------------------------------
-  -- VUnit extensions
+  -- Operations implemented by the Python bridge (NVC and GHDL only)
   -----------------------------------------------------------------------------
   -- Python represents std_ulogic values by these characters
   constant p_std_ulogic_characters : string(1 to 9) := "UX01ZWLH-";

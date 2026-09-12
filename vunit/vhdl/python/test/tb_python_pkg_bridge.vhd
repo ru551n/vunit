@@ -4,9 +4,9 @@
 --
 -- Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 --
--- Tests of the VUnit extensions of python_pkg and of the Python bridge
--- implementing them for NVC and GHDL. The API that VUnit has in common with
--- upstream is tested by tb_python_pkg.
+-- Tests of the python_pkg operations that are implemented by the Python
+-- bridge and therefore only available for NVC and GHDL. The rest of the
+-- package is tested by tb_python_pkg.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -16,11 +16,11 @@ library vunit_lib;
 context vunit_lib.vunit_context;
 context vunit_lib.python_context;
 
-entity tb_python_ext is
+entity tb_python_pkg_bridge is
   generic (runner_cfg : string);
 end entity;
 
-architecture tb of tb_python_ext is
+architecture tb of tb_python_pkg_bridge is
   constant std_ulogic_characters : string(1 to 9) := "UX01ZWLH-";
   constant group_error : string := "Only keyword arguments can be combined with & into a keyword argument group";
 begin
@@ -225,9 +225,9 @@ begin
       ---------------------------------------------------------------------
       -- Result types
       ---------------------------------------------------------------------
-      elsif run("Test the upstream eval and call forms with the extensions visible") then
-        -- The extensions add eval, call, arg and kwarg overloads but must not
-        -- make any upstream form ambiguous, not even a string literal
+      elsif run("Test that the bridge operations keep the other forms unambiguous") then
+        -- The bridge operations add eval, call, arg and kwarg overloads but
+        -- must not make any other form ambiguous, not even a string literal
         -- argument or an eval whose type comes from the context.
         check_equal(eval("17"), 17);
         check_equal(eval("3.40282346e38"), 3.40282346e38);
