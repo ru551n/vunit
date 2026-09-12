@@ -90,18 +90,6 @@ EXPECTED_EXPORTS = (
 )
 
 
-# The VHDL sources of the bridge are moved to vunit/vhdl/python/src and the FFI
-# template is renamed to python_bridge_pkg.vhd.in by the VHDL/builtins change.
-# Until that lands the template still sits at its old path, so setup() is run
-# with bridge_setup.BRIDGE_PACKAGE_TEMPLATE pointed at it.
-# TODO: drop CURRENT_TEMPLATE and _patch_template() once the rename is done.
-CURRENT_TEMPLATE = VHDL_PATH / "python_bridge" / "src" / "python_ffi_pkg.vhd.in"
-
-
-def _patch_template():
-    return mock.patch.object(bridge_setup, "BRIDGE_PACKAGE_TEMPLATE", CURRENT_TEMPLATE)
-
-
 def _write_run_script(path: Path) -> Path:
     """
     A stub run script; its directory is the base of relative Python file names.
@@ -110,21 +98,24 @@ def _write_run_script(path: Path) -> Path:
     return path
 
 
-# TODO(builtins): these two classes still test the removed
-# add_vhdl_builtins(python=...) wiring. The builtins/ui change must retarget
-# them to vu.add_python(): add_vhdl_builtins() is unconditional again (no
-# python parameter, no generated vunit_context) and the bridge files are
-# python_bridge_pkg.vhd, python_ffi_pkg_bridge.vhd and python_ext_pkg[-body].vhd.
-@unittest.skip("TODO(builtins): retarget from add_vhdl_builtins(python=...) to add_python()")
-class TestFeatureIsolation(unittest.TestCase):
+class TestAddPython(unittest.TestCase):
     """
-    add_vhdl_builtins(python=False) must never touch the bridge.
+    add_python() wiring: Builtins._add_python()/_add_python_bridge(), the upstream
+    ``vu.add_vhdl_builtins(); vu.add_python()`` API. add_vhdl_builtins() is
+    unconditional (no ``python`` parameter, always adds the unmodified
+    vunit_context.vhd) and add_python() adds python_context.vhd + python_pkg.vhd
+    plus, depending on simulator_class.supported_foreign_language_interfaces():
+    python_pkg_vhpi.vhd (VHPI), python_pkg_fli.vhd (FLI), or the Python bridge's
+    generated files (VHPIDIRECT_*), with bridge_setup.setup() stubbed so no
+    compilation happens here.
     """
 
     def setUp(self):
         self.vu = mock.Mock()
         self.vu._project = mock.Mock()
         self.vu._project._libraries = []
+        self.vu._output_path = "/fake/output/path"
+        self.vu._run_script_path = Path("/fake/run_script/run.py")
         self.library_mock = mock.Mock()
 
         def add_library(name):
@@ -132,20 +123,123 @@ class TestFeatureIsolation(unittest.TestCase):
             return self.library_mock
 
         self.vu.add_library.side_effect = add_library
-        self.builtins = Builtins(self.vu, VHDLStandard("2008"), _autospec_simulator("nvc"))
 
-    def test_python_false_never_touches_bridge(self):
+    def _builtins(self, vhdl_standard="2008", simulator=None):
+        return Builtins(self.vu, VHDLStandard(vhdl_standard), simulator)
+
+    def _added_files(self):
+        return [Path(call.args[0]) for call in self.library_mock.add_source_file.call_args_list]
+
+    @staticmethod
+    def _simulator_with_flis(name, flis):
+        simulator = _autospec_simulator(name)
+        simulator.supported_foreign_language_interfaces.return_value = flis
+        return simulator
+
+    def test_add_vhdl_builtins_never_touches_the_bridge(self):
+        builtins = self._builtins(simulator=_autospec_simulator("nvc"))
         with mock.patch("vunit.python_bridge.bridge.setup") as setup_mock:
-            self.builtins.add_vhdl_builtins(python=False)
+            builtins.add_vhdl_builtins()
         setup_mock.assert_not_called()
 
-        added_files = [Path(call.args[0]) for call in self.library_mock.add_source_file.call_args_list]
+        added_files = self._added_files()
         added_names = {p.name for p in added_files}
         self.assertIn("vunit_context.vhd", added_names)
         self.assertNotIn("python_pkg.vhd", added_names)
-        self.assertNotIn("python_pkg-body.vhd", added_names)
-        self.assertNotIn("python_ffi_pkg.vhd", added_names)
-        self.assertTrue(any(p == VHDL_PATH / "vunit_context.vhd" for p in added_files))
+        self.assertNotIn("python_context.vhd", added_names)
+        self.assertIn(VHDL_PATH / "vunit_context.vhd", added_files)
+
+    def test_add_python_before_add_vhdl_builtins_raises(self):
+        builtins = self._builtins(simulator=_autospec_simulator("nvc"))
+        with self.assertRaisesRegex(RuntimeError, "add_python\\(\\) requires add_vhdl_builtins\\(\\)"):
+            builtins.add("python")
+
+    def test_rejects_pre_2008_vhdl(self):
+        builtins = self._builtins(vhdl_standard="2002", simulator=_autospec_simulator("nvc"))
+        builtins.add_vhdl_builtins()
+        with self.assertRaisesRegex(RuntimeError, "vhdl 2008 and later"):
+            builtins.add("python")
+
+    def test_rejects_simulator_class_none(self):
+        builtins = self._builtins(simulator=None)
+        builtins._vhdl_builtins_added = True  # pylint: disable=protected-access
+        with self.assertRaisesRegex(RuntimeError, "no simulator was found"):
+            builtins.add("python")
+
+    def test_rejects_unsupported_simulator(self):
+        simulator = self._simulator_with_flis("some_simulator", {"SOME_OTHER_INTERFACE"})
+        builtins = self._builtins(simulator=simulator)
+        builtins.add_vhdl_builtins()
+        with self.assertRaisesRegex(RuntimeError, "supports none of them") as ctx:
+            builtins.add("python")
+        # The message names the interfaces so a user knows what is supported.
+        self.assertIn("VHPI", str(ctx.exception))
+        self.assertIn("FLI", str(ctx.exception))
+        self.assertIn("VHPIDIRECT_NVC", str(ctx.exception))
+        self.assertIn("VHPIDIRECT_GHDL", str(ctx.exception))
+
+    def test_vhpi_adds_python_pkg_vhpi_and_no_bridge(self):
+        simulator = self._simulator_with_flis("rivierapro", {"VHPI"})
+        builtins = self._builtins(simulator=simulator)
+        builtins.add_vhdl_builtins()
+        with mock.patch("vunit.python_bridge.bridge.setup") as setup_mock:
+            builtins.add("python")
+        setup_mock.assert_not_called()
+
+        src_path = VHDL_PATH / "python" / "src"
+        added_files = self._added_files()
+        self.assertIn(src_path / "python_context.vhd", added_files)
+        self.assertIn(src_path / "python_pkg.vhd", added_files)
+        self.assertIn(src_path / "python_pkg_vhpi.vhd", added_files)
+        self.assertNotIn(src_path / "python_pkg_fli.vhd", added_files)
+
+    def test_fli_adds_python_pkg_fli_and_no_bridge(self):
+        simulator = self._simulator_with_flis("modelsim", {"FLI"})
+        builtins = self._builtins(simulator=simulator)
+        builtins.add_vhdl_builtins()
+        with mock.patch("vunit.python_bridge.bridge.setup") as setup_mock:
+            builtins.add("python")
+        setup_mock.assert_not_called()
+
+        src_path = VHDL_PATH / "python" / "src"
+        added_files = self._added_files()
+        self.assertIn(src_path / "python_context.vhd", added_files)
+        self.assertIn(src_path / "python_pkg.vhd", added_files)
+        self.assertIn(src_path / "python_pkg_fli.vhd", added_files)
+        self.assertNotIn(src_path / "python_pkg_vhpi.vhd", added_files)
+
+    def test_vhpidirect_adds_the_bridge_files(self):
+        simulator = self._simulator_with_flis("nvc", {"VHPIDIRECT_NVC"})
+        builtins = self._builtins(simulator=simulator)
+        builtins.add_vhdl_builtins()
+
+        fake_bridge = bridge_setup.PythonBridge(
+            library_file=Path("/fake/cache/libvunit_python_bridge.so"),
+            vhdl_files=[
+                Path("/fake/out/python_bridge/vhdl/python_bridge_pkg.vhd"),
+                bridge_setup.VHDL_SOURCE_PATH / "python_ffi_pkg_bridge.vhd",
+                bridge_setup.VHDL_SOURCE_PATH / "python_ext_pkg.vhd",
+                bridge_setup.VHDL_SOURCE_PATH / "python_ext_pkg-body.vhd",
+            ],
+        )
+        with mock.patch("vunit.python_bridge.bridge.setup", return_value=fake_bridge) as setup_mock:
+            builtins.add("python")
+
+        # The bridge must be handed the VUnit object's own project, output
+        # path, simulator class and run script path (the base of relative
+        # Python file names, shared with import_run_script).
+        setup_mock.assert_called_once_with(
+            self.vu._project, self.vu._output_path, simulator, self.vu._run_script_path
+        )
+
+        src_path = VHDL_PATH / "python" / "src"
+        added_files = self._added_files()
+        self.assertIn(src_path / "python_context.vhd", added_files)
+        self.assertIn(src_path / "python_pkg.vhd", added_files)
+        for expected in fake_bridge.vhdl_files:
+            self.assertIn(expected, added_files)
+        self.assertNotIn(src_path / "python_pkg_vhpi.vhd", added_files)
+        self.assertNotIn(src_path / "python_pkg_fli.vhd", added_files)
 
     def test_importing_python_bridge_has_no_side_effects(self):
         # Re-importing must not create any files or directories or run any subprocess.
@@ -164,72 +258,18 @@ class TestFeatureIsolation(unittest.TestCase):
         self.assertEqual(listing(), before)
 
 
-@unittest.skip("TODO(builtins): retarget from add_vhdl_builtins(python=True) to add_python()")
-class TestAddVhdlBuiltinsPython(unittest.TestCase):
+class TestFindRunScriptPath(unittest.TestCase):
     """
-    add_vhdl_builtins(python=True) wiring, using a stubbed bridge_setup.setup
-    so no compilation happens here.
+    vunit.ui._find_run_script_path(): the file of the first call-stack frame
+    outside the vunit package, used as the VUnit object's ``_run_script_path``
+    (fed to the Python bridge and, through run_script_path(runner_cfg), to
+    import_run_script).
     """
 
-    def setUp(self):
-        self.vu = mock.Mock()
-        self.vu._project = mock.Mock()
-        self.vu._project._libraries = []
-        self.library_mock = mock.Mock()
+    def test_returns_the_file_of_the_caller_outside_vunit(self):
+        from vunit.ui import _find_run_script_path  # pylint: disable=import-outside-toplevel
 
-        def add_library(name):
-            self.vu._project._libraries.append(name)
-            return self.library_mock
-
-        self.vu.add_library.side_effect = add_library
-
-    def _builtins(self, vhdl_standard="2008", simulator=None):
-        return Builtins(self.vu, VHDLStandard(vhdl_standard), simulator or _autospec_simulator("nvc"))
-
-    def test_rejects_pre_2008_vhdl(self):
-        builtins = self._builtins(vhdl_standard="2002")
-        with self.assertRaisesRegex(RuntimeError, "VHDL Python support only supports vhdl 2008 and later"):
-            builtins.add_vhdl_builtins(python=True)
-
-    def test_rejects_unsupported_simulator(self):
-        # Reported like other VUnit setup errors: logged, then exit code 1
-        builtins = self._builtins(simulator=_autospec_simulator("modelsim"))
-        with self.assertLogs("vunit.builtins", level="ERROR") as logs, self.assertRaises(SystemExit) as exit_:
-            builtins.add_vhdl_builtins(python=True)
-        self.assertEqual(exit_.exception.code, 1)
-        self.assertRegex(logs.output[0], "requires NVC or GHDL.*not supported for modelsim")
-
-    def test_adds_expected_files_instead_of_original_context(self):
-        with create_tempdir() as tempdir:
-            fake_bridge = bridge_setup.PythonBridge(
-                library_file=tempdir / "libFAKE.so",
-                vhdl_files=[
-                    tempdir / "vhdl" / "python_ffi_pkg.vhd",
-                    bridge_setup.VHDL_SOURCE_PATH / "python_pkg.vhd",
-                    bridge_setup.VHDL_SOURCE_PATH / "python_pkg-body.vhd",
-                    tempdir / "vhdl" / "vunit_context.vhd",
-                ],
-            )
-            with mock.patch("vunit.python_bridge.bridge.setup", return_value=fake_bridge) as setup_mock:
-                builtins = self._builtins()
-                builtins.add_vhdl_builtins(python=True)
-
-            setup_mock.assert_called_once()
-            added_files = {Path(call.args[0]) for call in self.library_mock.add_source_file.call_args_list}
-            for expected in fake_bridge.vhdl_files:
-                self.assertIn(expected, added_files)
-            self.assertNotIn(VHDL_PATH / "vunit_context.vhd", added_files)
-
-    def test_setup_accepts_simulator_class_none(self):
-        # bridge_setup.setup() itself (not Builtins, which needs a real
-        # simulator_class for unrelated calls) must accept simulator_class=None.
-        with create_tempdir() as tempdir:
-            context_file = tempdir / "vunit_context.vhd"
-            _write_context_stub(context_file)
-            fake_library_file = tempdir / "cache" / "libvunit_python_bridge.so"
-            with mock.patch("vunit.python_bridge.bridge.prepare_library", return_value=fake_library_file):
-                bridge = bridge_setup.setup(_BridgeKey(), tempdir / "out", None, context_file)
-            self.assertEqual(bridge.library_file, fake_library_file)
+        self.assertEqual(_find_run_script_path(), Path(__file__).resolve())
 
 
 class TestBridgePackageSubstitution(unittest.TestCase):
@@ -245,10 +285,7 @@ class TestBridgePackageSubstitution(unittest.TestCase):
 
     def _setup(self, simulator, library_file_name="libvunit_python_bridge.so"):
         fake_library_file = self.tempdir / "cache" / library_file_name
-        with (
-            mock.patch("vunit.python_bridge.bridge.prepare_library", return_value=fake_library_file),
-            _patch_template(),
-        ):
+        with mock.patch("vunit.python_bridge.bridge.prepare_library", return_value=fake_library_file):
             return bridge_setup.setup(_BridgeKey(), self.tempdir / "out", simulator, self.run_script)
 
     def _ffi_text(self, bridge):
@@ -330,8 +367,7 @@ class TestPosixBuildAndCache(unittest.TestCase):
         self.run_script = _write_run_script(self.tempdir / "run.py")
 
     def _setup(self, output_path=None):
-        with _patch_template():
-            return bridge_setup.setup(_BridgeKey(), output_path or self.tempdir / "out", None, self.run_script)
+        return bridge_setup.setup(_BridgeKey(), output_path or self.tempdir / "out", None, self.run_script)
 
     def test_first_setup_compiles_and_names_library(self):
         bridge = self._setup()
@@ -473,10 +509,7 @@ class TestConfigFile(unittest.TestCase):
         with create_tempdir() as tempdir:
             run_script = _write_run_script(tempdir / "run.py")
             fake_library_file = tempdir / "cache" / "libvunit_python_bridge.so"
-            with (
-                mock.patch("vunit.python_bridge.bridge.prepare_library", return_value=fake_library_file),
-                _patch_template(),
-            ):
+            with mock.patch("vunit.python_bridge.bridge.prepare_library", return_value=fake_library_file):
                 bridge_setup.setup(_BridgeKey(), tempdir / "out", None, run_script)
             config = (fake_library_file.parent / bridge_setup.CONFIG_FILE_NAME).read_text(encoding="utf-8")
             keys = dict(line.split("=", 1) for line in config.splitlines())

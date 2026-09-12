@@ -4,14 +4,21 @@
 #
 # Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 
+"""
+Embedded Python
+---------------
+
+Demonstrates calling Python from VHDL with ``add_python()``: executing Python
+code and calling Python functions, for example NumPy/Matplotlib reference
+models, from a testbench. Some tests need optional Python packages
+(``PySimpleGUI``, ``python-constraint``, ``crccheck`` and ``matplotlib``) or
+demonstrate error reporting and are excluded by default; see
+:ref:`python_bridge`.
+"""
+
 from pathlib import Path
 from vunit import VUnit
-from vunit.python_pkg import (
-    compile_vhpi_application,
-    compile_fli_application,
-    compile_vhpidirect_nvc_application,
-    compile_vhpidirect_ghdl_application,
-)
+from vunit.python_pkg import compile_vhpi_application, compile_fli_application
 
 
 def hello_world():
@@ -78,10 +85,8 @@ def main():
         compile_vhpi_application(root, vu)
     elif simulator_name == "modelsim":
         compile_fli_application(root, vu)
-    elif simulator_name == "nvc":
-        compile_vhpidirect_nvc_application(root, vu)
-    elif simulator_name == "ghdl":
-        compile_vhpidirect_ghdl_application(root, vu)
+    # NVC and GHDL are handled automatically by add_python() through the VUnit
+    # Python bridge; no separate compile step or simulator flag is needed.
 
     lib = vu.add_library("lib")
     lib.add_source_files(root / "*.vhd")
@@ -91,7 +96,30 @@ def main():
     # Crashes RPRO for some reason. TODO: Fix when the C code is properly
     # integrated into the project. Must be able to debug the C code.
     # vu.set_sim_option("rivierapro.vsim_flags" , ["-cdebug"])
-    vu.set_sim_option("nvc.sim_flags", ["--load", str(root / "vunit_out" / "nvc" / "libraries" / "python.so")])
+
+    tb = lib.test_bench("tb_example")
+
+    # These tests need optional Python packages that are not part of VUnit's
+    # own test requirements; they are skipped unless explicitly selected.
+    for test_name in (
+        "Test GUI browsing for input stimuli file",  # PySimpleGUI
+        "Test querying for randomization seed",  # PySimpleGUI
+        "Test controlling progress of simulation",  # PySimpleGUI
+        "Test constraint solving",  # python-constraint
+        "Test using a Python module as the golden reference",  # crccheck
+        "Test using Python in an behavioral model",  # crccheck
+        "Test simple plot",  # matplotlib
+        "Test advanced plot",  # matplotlib
+    ):
+        tb.test(test_name).set_attribute(".optional_deps", None)
+
+    # These tests demonstrate error reporting and are expected to fail.
+    for test_name in (
+        "Test syntax error",
+        "Test type error",
+        "Test Python exception",
+    ):
+        tb.test(test_name).set_attribute(".expected_failure", None)
 
     vu.main()
 
