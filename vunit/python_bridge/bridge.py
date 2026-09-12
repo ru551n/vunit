@@ -88,8 +88,6 @@ def setup(project, output_path: str, simulator_class, run_script_path: Path) -> 
         [
             bridge_package,
             VHDL_SOURCE_PATH / "python_ffi_pkg_bridge.vhd",
-            VHDL_SOURCE_PATH / "python_ext_pkg.vhd",
-            VHDL_SOURCE_PATH / "python_ext_pkg-body.vhd",
         ],
     )
     _BRIDGES[project] = bridge

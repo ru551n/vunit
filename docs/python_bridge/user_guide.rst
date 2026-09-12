@@ -54,8 +54,8 @@ Requirements
 * VHDL-2008 or later.
 * CPython 3.10 or later with the standard (GIL) build. Free-threaded builds
   are rejected with an error.
-* NumPy, but only if ``integer_array_t`` values are exchanged (:ref:`python_ext_pkg
-  <python_bridge:extensions>`, NVC/GHDL only).
+* NumPy, but only if ``integer_array_t`` values are exchanged
+  (:ref:`python_bridge:integer_array`, NVC/GHDL only).
 * Linux (NVC/GHDL): a C compiler (``cc``, ``gcc`` or ``clang``, or ``CC``) and
   the Python development headers (for example the ``python3-dev`` package)
   since the bridge library is compiled on first use, see
@@ -99,9 +99,9 @@ Sessions
 --------
 
 Every operation that runs Python code or evaluates a Python expression --
-``exec``, ``eval``/``eval_<type>``, ``call``, ``import_run_script``,
-``import_module_from_file``, and the :ref:`python_ext_pkg <python_bridge:extensions>`
-operations such as ``exec_file`` -- takes an optional trailing parameter,
+``exec``, ``eval``/``eval_<type>``, ``call``, ``exec_file``,
+``import_run_script`` and ``import_module_from_file`` -- takes an optional
+trailing parameter,
 ``session : python_session_t := default_session``, that selects the namespace
 the operation runs in. A session is created the first time it is used; the
 ``default_session`` constant used when the parameter is omitted runs in
@@ -219,6 +219,37 @@ name selects the overload:
 
     info("pi = " & to_string(eval_real("pi")));
 
+On NVC and GHDL, where the API is implemented by the VUnit Python bridge,
+``eval`` has more result types:
+
+* ``eval_boolean``, returning ``boolean``. Only ``bool``/``numpy.bool_`` is
+  accepted. It also makes the result of ``eval`` usable as a condition:
+  ``if eval("model.is_done()") then``.
+* ``eval_std_ulogic``, returning ``std_ulogic``.
+* ``eval_std_ulogic_vector``, returning an unconstrained ``std_ulogic_vector``.
+* ``eval_integer_array``, returning ``integer_array_t``, see
+  :ref:`python_bridge:integer_array`.
+
+``eval_boolean`` and ``eval_std_ulogic`` are aliased ``eval`` like the other
+result types. ``eval_std_ulogic_vector`` and ``eval_integer_array`` are not,
+since that would make ``check_equal(eval("17"), 17)`` and
+``length(eval("[1, 2]"))`` ambiguous: use their explicit names.
+
+``std_ulogic_vector``, ``signed`` and ``unsigned`` results are also available
+as the procedures ``eval_std_ulogic_vector``, ``eval_signed`` and
+``eval_unsigned``, that take the result as an ``out`` parameter. The width is
+given by the actual, and a Python value that does not fit that width is an
+error. ``signed`` and ``unsigned`` results are only available in the
+procedure form, since a function cannot know the width of the result.
+
+.. code-block:: vhdl
+
+    variable byte : std_ulogic_vector(7 downto 0);
+    variable level : signed(15 downto 0);
+  begin
+    eval_std_ulogic_vector("format(value, '08b')", byte);
+    eval_signed("model.level()", level);
+
 call, arg, kwarg and to_call_str
 ---------------------------------
 
@@ -241,12 +272,33 @@ given by name since it follows the positional arguments:
     -- No return value: the procedure form of call
     call("print", arg(35), arg(77), arg(119));
 
-``arg`` and ``kwarg`` accept ``integer``, ``real``, ``boolean`` and ``string``
-values. A string *literal* must be qualified with ``string'(...)`` once
-:ref:`python_ext_pkg <python_bridge:extensions>` is also in scope, since its
-additional ``arg``/``kwarg`` overload for ``std_ulogic_vector`` would
-otherwise also match: ``arg(string'("hello"))``. Without ``python_ext_pkg``,
-``arg("hello")`` is unambiguous.
+``arg`` and ``kwarg`` accept ``integer``, ``real``, ``boolean``, ``string``
+and ``integer_vector`` values, and on NVC and GHDL also ``real_vector``,
+``integer_vector_ptr_t`` and ``integer_array_t``
+(:ref:`python_bridge:integer_array`) values. Vectors become Python lists.
+
+An aggregate or a literal does not select an overload by itself and needs a
+qualified expression: ``arg(real_vector'(1.0, 2.0))``,
+``arg(integer_vector'(1, 2, 3))``. Values of the remaining types are passed
+through a conversion, a ``std_ulogic_vector`` as the string of its
+characters and a ``signed`` or ``unsigned`` value as an integer:
+
+.. code-block:: vhdl
+
+    call("model.push", arg(to_string(slv)));
+    call("model.scale", arg(to_integer(gain)));
+
+There are deliberately no ``arg``/``kwarg`` overloads for ``std_ulogic``,
+``std_ulogic_vector``, ``signed`` and ``unsigned``: they would make a string
+literal argument, ``arg("hello")``, ambiguous.
+
+On NVC and GHDL, ``call`` returns the same additional types as ``eval``:
+``call_boolean``, ``call_std_ulogic``, ``call_std_ulogic_vector``,
+``call_integer_array``, ``call_string``, ``call_real_vector`` and
+``call_integer_vector_ptr``, plus the procedures ``call_std_ulogic_vector``,
+``call_signed`` and ``call_unsigned`` taking the result as an ``out``
+parameter. All of the functions but ``call_std_ulogic_vector`` and
+``call_integer_array`` are aliased ``call``.
 
 ``to_call_str`` builds the Python call expression itself, as a string, which
 is useful to embed a call inside a larger ``exec``/``eval`` string:
@@ -309,10 +361,15 @@ Type mapping
 * ``integer`` ↔ ``int``. Results outside the VHDL integer range fail.
 * ``real`` ↔ ``float``. Strict: an ``int`` result is not accepted.
 * ``string`` ↔ ``str``. UTF-8.
-* ``boolean`` ↔ ``bool`` (:ref:`python_ext_pkg <python_bridge:extensions>` only).
+* ``boolean`` ↔ ``bool``/``numpy.bool_`` (NVC and GHDL only).
 * ``integer_vector`` ↔ ``list`` of ``int``.
-* ``real_vector`` ↔ ``list`` of ``float`` (:ref:`python_ext_pkg <python_bridge:extensions>` for ``eval``/``call``).
+* ``real_vector`` ↔ ``list`` of ``float`` (``call_real_vector`` is NVC and GHDL only).
 * ``integer_vector_ptr_t`` ↔ ``list`` of ``int``.
+* ``std_ulogic``/``std_ulogic_vector`` ↔ ``str``, one character per element
+  out of ``U X 0 1 Z W L H -``, left to right (results only, NVC and GHDL).
+* ``signed``/``unsigned`` ↔ ``int`` (procedure results only, NVC and GHDL).
+* ``integer_array_t`` ↔ ``numpy.ndarray`` (NVC and GHDL), see
+  :ref:`python_bridge:integer_array`.
 
 Results are strict: a value that does not fit the VHDL type, or is of the
 wrong Python type, is an error. Values are never silently truncated or
@@ -340,63 +397,15 @@ handling; when mocked, ``eval``/``call`` return a default value (``0``,
 Output of ``print`` is written to the simulator output and flushed after
 every operation.
 
-.. _python_bridge:extensions:
+.. _python_bridge:integer_array:
 
-Extensions
-----------
+integer_array_t and NumPy
+--------------------------
 
 .. note::
 
-   Everything in this section is implemented by the VUnit Python bridge and
-   is therefore only available on NVC and GHDL (:ref:`sessions
-   <python_bridge:sessions>` are the exception: they work on every
-   simulator). It requires ``use vunit_lib.python_ext_pkg.all;`` in addition
-   to ``context vunit_lib.python_context;``.
-
-``python_ext_pkg`` adds argument value types, result types and features that
-are not part of the reference implementation.
-
-Bringing the additional overloads into scope makes string literal arguments
-ambiguous: ``arg("hello")`` can now also be read as a ``std_ulogic_vector``,
-``signed`` or ``unsigned`` value, so qualify the literal
-(``arg(string'("hello"))``). Variables are unaffected. ``std_ulogic_vector``
-results are only available under their explicit names
-(``eval_std_ulogic_vector``, ``call_std_ulogic_vector``), which keeps
-``check_equal(eval("17"), 17)`` unambiguous.
-
-Additional argument values
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``arg`` and ``kwarg`` also accept:
-
-* ``std_ulogic`` ↔ a one-character ``str``, one of ``U X 0 1 Z W L H -``.
-* ``std_ulogic_vector`` ↔ ``str``, one character per element, left to right.
-* ``signed``/``unsigned`` ↔ ``int``. Metavalues other than ``L``/``H`` fail (impure).
-* ``real_vector`` ↔ ``list`` of ``float``.
-* ``integer_vector_ptr_t`` ↔ ``list`` of ``int`` (impure).
-* ``integer_array_t`` ↔ ``numpy.ndarray``, see below (impure).
-
-Additional eval/call result types
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-* ``eval_boolean``/``call_boolean``, returning ``boolean``. Only ``bool``/``numpy.bool_`` accepted.
-* ``eval_std_ulogic``/``call_std_ulogic``, returning ``std_ulogic``.
-* ``eval_std_ulogic_vector``/``call_std_ulogic_vector``, returning ``std_ulogic_vector`` (unconstrained).
-* ``eval_integer_array``/``call_integer_array``, returning ``integer_array_t``, see below.
-* ``call_string``, returning ``string``.
-* ``call_real_vector``, returning ``real_vector``.
-* ``call_integer_vector_ptr``, returning ``integer_vector_ptr_t``.
-
-``std_ulogic_vector``, ``signed`` and ``unsigned`` results are also available
-as procedures, ``eval_std_ulogic_vector``/``eval_signed``/``eval_unsigned``
-and ``call_std_ulogic_vector``/``call_signed``/``call_unsigned``, that take the
-result as an ``out`` parameter. The width is given by the actual, and a
-Python value that does not fit that width is an error. ``signed`` and
-``unsigned`` results are only available in the procedure form, since a
-function cannot know the width the result is assigned to.
-
-integer_array_t and NumPy
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ``integer_array_t`` values are transferred by the VUnit Python bridge and
+   are therefore only available on NVC and GHDL.
 
 An ``integer_array_t`` argument is transferred to Python and referred to by
 the expression as a NumPy array of dtype ``int32``, so it can be reused in
@@ -427,9 +436,9 @@ As usual, the returned ``integer_array_t`` is owned by the caller and can be
 freed with ``deallocate``.
 
 exec_file
-~~~~~~~~~
+---------
 
-``exec_file`` executes a Python file, with the equivalent of
+``exec_file`` executes a Python file (on NVC and GHDL), with the equivalent of
 
 .. code-block:: python
 

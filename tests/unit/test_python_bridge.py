@@ -218,8 +218,6 @@ class TestAddPython(unittest.TestCase):
             vhdl_files=[
                 Path("/fake/out/python_bridge/vhdl/python_bridge_pkg.vhd"),
                 bridge_setup.VHDL_SOURCE_PATH / "python_ffi_pkg_bridge.vhd",
-                bridge_setup.VHDL_SOURCE_PATH / "python_ext_pkg.vhd",
-                bridge_setup.VHDL_SOURCE_PATH / "python_ext_pkg-body.vhd",
             ],
         )
         with mock.patch("vunit.python_bridge.bridge.setup", return_value=fake_bridge) as setup_mock:
