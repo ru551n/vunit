@@ -29,7 +29,7 @@ except ModuleNotFoundError:
 from vunit.vhdl_standard import VHDL, VHDLStandard
 from vunit.ui.common import get_checked_file_names_from_globs
 from vunit.about import version, VUnitVersion
-from vunit.python_pkg import setup_fli_application, setup_vhpi_application
+from vunit.python_pkg import setup_vhpi_application
 
 
 LOGGER = logging.getLogger(__name__)
@@ -517,17 +517,15 @@ in your VUnit Git repository? You have to do this first if installing using setu
         self._vunit_lib.add_source_file(src_path / "python_context.vhd")
         self._vunit_lib.add_source_file(src_path / "python_pkg.vhd")
         if "VHPI" in simulator_supported_flis:
+            # Riviera-PRO/Active-HDL, the only simulators still on the upstream application
             self._vunit_lib.add_source_file(src_path / "python_pkg_vhpi.vhd")
             self._setup_python_application(setup_vhpi_application)
-        elif "FLI" in simulator_supported_flis:
-            self._vunit_lib.add_source_file(src_path / "python_pkg_fli.vhd")
-            self._setup_python_application(setup_fli_application)
         else:
             self._add_python_bridge()
 
     def _setup_python_application(self, setup):
         """
-        Build the FLI or VHPI application of the Python package under the output path when needed.
+        Build the VHPI application of the Python package under the output path when needed.
         """
         try:
             setup(
@@ -540,8 +538,8 @@ in your VUnit Git repository? You have to do this first if installing using setu
 
     def _add_python_bridge(self):
         """
-        Add the VUnit Python bridge, the VHPIDIRECT implementation of the Python package for NVC and GHDL,
-        building its native library when needed.
+        Add the VUnit Python bridge, the implementation of the Python package for NVC and GHDL
+        (VHPIDIRECT) and Questa/ModelSim (FLI), building its native library when needed.
         """
         # pylint: disable=import-outside-toplevel
         from vunit.python_bridge.bridge import setup

@@ -44,10 +44,10 @@ become available through ``python_context``:
 Requirements
 ------------
 
-* NVC or GHDL, through the VUnit Python bridge described below, or
-  Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL (VHPI) through the
-  applications of the upstream ``python_pkg`` branch, which
-  :meth:`add_python() <vunit.ui.VUnit.add_python>` builds in the same way, see
+* NVC, GHDL or Questa/ModelSim, through the VUnit Python bridge described
+  below, or Riviera-PRO/Active-HDL (VHPI) through the application of the
+  upstream ``python_pkg`` branch, which :meth:`add_python()
+  <vunit.ui.VUnit.add_python>` builds in the same way, see
   :ref:`python_bridge:other_simulators`. Any other simulator, or calling
   :meth:`add_python() <vunit.ui.VUnit.add_python>` before
   :meth:`add_vhdl_builtins() <vunit.ui.VUnit.add_vhdl_builtins>`, raises a
@@ -56,11 +56,11 @@ Requirements
 * CPython 3.10 or later with the standard (GIL) build. Free-threaded builds
   are rejected with an error.
 * NumPy, but only if ``integer_array_t`` values are exchanged
-  (:ref:`python_bridge:integer_array`, NVC/GHDL only).
+  (:ref:`python_bridge:integer_array`, not on Riviera-PRO/Active-HDL).
 * Linux: a C compiler (``cc``, ``gcc`` or ``clang``, or ``CC``) and
   the Python development headers (for example the ``python3-dev`` package)
-  since the bridge library, or the FLI application, is compiled on first use,
-  see :ref:`python_bridge:native`. Python must provide a shared ``libpython``
+  since the bridge library is compiled on first use, see
+  :ref:`python_bridge:native`. Python must provide a shared ``libpython``
   (``--enable-shared``), which is the case for distribution Pythons,
   ``actions/setup-python``, ``uv`` and ``pyenv`` builds with default settings.
 * Windows: a 64-bit CPython from python.org (or compatible, such as
@@ -126,8 +126,8 @@ Since ``session`` comes after up to 10 positional arguments in ``call``, it is
 normally given by name, as above. Both sessions in the example can define
 ``model`` without interfering with each other.
 
-On Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL (VHPI), only the default
-session is supported: passing any other session fails with a clear error.
+On Riviera-PRO/Active-HDL (VHPI), only the default session is supported:
+passing any other session fails with a clear error.
 
 Caveats
 ~~~~~~~
@@ -221,8 +221,8 @@ name selects the overload:
 
     info("pi = " & to_string(eval_real("pi")));
 
-On NVC and GHDL, where the API is implemented by the VUnit Python bridge,
-``eval`` has more result types:
+On NVC, GHDL and Questa, where the API is implemented by the VUnit Python
+bridge, ``eval`` has more result types:
 
 * ``eval_boolean``, returning ``boolean``. Only ``bool``/``numpy.bool_`` is
   accepted. It also makes the result of ``eval`` usable as a condition:
@@ -289,7 +289,7 @@ VHDL                       Python
 ``std_ulogic``             ``bool``, 1 and H give ``True``, 0 and L give ``False``
 ``unsigned``               ``int``, passed as ``arg_unsigned``/``kwarg_unsigned``
 ``signed``                 ``int``, passed as ``arg_signed``/``kwarg_signed``
-``integer_array_t``        NumPy array, on NVC and GHDL only
+``integer_array_t``        NumPy array, not on Riviera-PRO/Active-HDL
 ========================== ========================================================
 
 An ``unsigned`` or ``signed`` value of any width becomes an exact Python
@@ -311,7 +311,8 @@ passed as a number or as the string of its characters:
     call("model.scale", arg_unsigned(unsigned(gain)));
     call("model.push", arg(to_string(slv)));
 
-On NVC and GHDL, ``call`` returns the same additional types as ``eval``:
+On NVC, GHDL and Questa, ``call`` returns the same additional types as
+``eval``:
 ``call_boolean``, ``call_std_ulogic``, ``call_std_ulogic_vector``,
 ``call_integer_array``, ``call_string``, ``call_real_vector`` and
 ``call_integer_vector_ptr``, plus the procedures ``call_std_ulogic_vector``,
@@ -398,15 +399,18 @@ Type mapping
 * ``integer`` ↔ ``int``. Results outside the VHDL integer range fail.
 * ``real`` ↔ ``float``. Strict: an ``int`` result is not accepted.
 * ``string`` ↔ ``str``. UTF-8.
-* ``boolean`` ↔ ``bool``/``numpy.bool_`` (NVC and GHDL only).
+* ``boolean`` ↔ ``bool``/``numpy.bool_`` (Python bridge only).
 * ``integer_vector`` ↔ ``list`` of ``int``.
-* ``real_vector`` ↔ ``list`` of ``float`` (``call_real_vector`` is NVC and GHDL only).
+* ``real_vector`` ↔ ``list`` of ``float`` (``call_real_vector`` needs the bridge).
 * ``integer_vector_ptr_t`` ↔ ``list`` of ``int``.
 * ``std_ulogic``/``std_ulogic_vector`` ↔ ``str``, one character per element
-  out of ``U X 0 1 Z W L H -``, left to right (results only, NVC and GHDL).
-* ``signed``/``unsigned`` ↔ ``int`` (procedure results only, NVC and GHDL).
-* ``integer_array_t`` ↔ ``numpy.ndarray`` (NVC and GHDL), see
+  out of ``U X 0 1 Z W L H -``, left to right (results only, Python bridge).
+* ``signed``/``unsigned`` ↔ ``int`` (procedure results only, Python bridge).
+* ``integer_array_t`` ↔ ``numpy.ndarray`` (Python bridge), see
   :ref:`python_bridge:integer_array`.
+
+The types marked as needing the Python bridge are available on NVC, GHDL and
+Questa, but not on Riviera-PRO/Active-HDL.
 
 Results are strict: a value that does not fit the VHDL type, or is of the
 wrong Python type, is an error. Values are never silently truncated or
@@ -442,7 +446,8 @@ integer_array_t and NumPy
 .. note::
 
    ``integer_array_t`` values are transferred by the VUnit Python bridge and
-   are therefore only available on NVC and GHDL.
+   are therefore available on NVC, GHDL and Questa, but not on
+   Riviera-PRO/Active-HDL.
 
 An ``integer_array_t`` argument is transferred to Python and referred to by
 the expression as a NumPy array of dtype ``int32``, so it can be reused in
@@ -475,7 +480,8 @@ freed with ``deallocate``.
 exec_file
 ---------
 
-``exec_file`` executes a Python file (on NVC and GHDL), with the equivalent of
+``exec_file`` executes a Python file (where the Python bridge implements the
+API: NVC, GHDL and Questa), with the equivalent of
 
 .. code-block:: python
 
@@ -512,8 +518,8 @@ Differences from the reference implementation
      including the Python traceback, instead of aborting the simulation.
    * ``python_cleanup`` does not finalize the interpreter.
    * ``real`` results have no float32 range limit: VHDL ``real`` is double
-     precision on NVC and GHDL, so a Python ``float`` (also double precision)
-     is never out of range.
+     precision where the Python bridge implements the API, so a Python
+     ``float`` (also double precision) is never out of range.
    * ``string`` arguments are passed to Python double-quoted verbatim, like
      the reference implementation: a quote or backslash inside the string is
      not escaped, so it must be avoided or already be valid inside a Python
@@ -524,28 +530,28 @@ Differences from the reference implementation
 Other simulators
 -----------------
 
-Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL (VHPI) implement
-``python_ffi_pkg`` with the foreign language applications of the upstream
-``python_pkg`` branch, built from the C sources in
-:vunit_file:`vunit/vhdl/python/src <vunit/vhdl/python/src>`.
-:meth:`add_python() <vunit.ui.VUnit.add_python>` builds the application under
-the output path (``<output path>/<simulator>/libraries/python``) the first
-time it is called and rebuilds it when the sources, the Python running VUnit
-or the simulator installation change, so a run script needs nothing beyond
-:meth:`add_python() <vunit.ui.VUnit.add_python>`. The run script helpers
-``compile_fli_application`` and ``compile_vhpi_application`` of the upstream
-branch remain available and do the same.
+Riviera-PRO/Active-HDL (VHPI) implement ``python_ffi_pkg`` with the foreign
+language application of the upstream ``python_pkg`` branch, built from the C
+sources in :vunit_file:`vunit/vhdl/python/src <vunit/vhdl/python/src>` with
+their ``ccomp`` driver. :meth:`add_python() <vunit.ui.VUnit.add_python>` builds
+the application under the output path (``<output path>/<simulator>/libraries``)
+the first time it is called and rebuilds it when the sources, the Python
+running VUnit or the simulator installation change, so a run script needs
+nothing beyond :meth:`add_python() <vunit.ui.VUnit.add_python>`. The run script
+helper ``compile_vhpi_application`` of the upstream branch remains available
+and does the same.
 
-On Questa the application is compiled with the system C compiler on Linux and
-with the MinGW compiler bundled with Questa on Windows, against the Python
-running VUnit. Riviera-PRO/Active-HDL use their ``ccomp`` driver.
-
-These applications differ from the Python bridge in a few ways: only the
+This application differs from the Python bridge in a few ways: only the
 default session exists, the operations implemented by the bridge
 (``integer_array_t`` values, the additional result types, ``exec_file``) report
-that they require NVC or GHDL, a Python error stops the simulation with the
-message printed by the application rather than through ``python_logger``, and
-``real`` values outside the single precision float range are rejected.
+that they require NVC, GHDL or Questa, a Python error stops the simulation with
+the message printed by the application rather than through ``python_logger``,
+and ``real`` values outside the single precision float range are rejected.
+
+The equivalent FLI application for Questa/ModelSim is still in the tree, and
+``setup_fli_application``/``compile_fli_application`` still build it, but
+:meth:`add_python() <vunit.ui.VUnit.add_python>` no longer uses it: Questa gets
+the Python bridge like NVC and GHDL.
 
 See :vunit_example:`➚ examples/vhdl/embedded_python <vhdl/embedded_python>` for
 a complete example covering all three simulator families.
@@ -554,28 +560,38 @@ a complete example covering all three simulator families.
 
 .. _python_bridge:native:
 
-How it works (NVC and GHDL)
------------------------------
+How it works (NVC, GHDL and Questa)
+------------------------------------
 
-For NVC and GHDL, the interpreter is embedded in the simulator process by a
-small C library, the VUnit Python bridge (:vunit_file:`vunit/python_bridge/native
-<vunit/python_bridge/native>`), called through VHPIDIRECT. The interpreter is
-started on first use, is never restarted within a simulation, and uses no
-signal handlers of its own.
+For NVC, GHDL and Questa, the interpreter is embedded in the simulator process
+by a small C library, the VUnit Python bridge (:vunit_file:`vunit/python_bridge/native
+<vunit/python_bridge/native>`). NVC and GHDL call it through VHPIDIRECT;
+Questa/ModelSim calls it through the FLI, using the front end in
+:vunit_file:`native/fli.c <vunit/python_bridge/native/fli.c>` that converts the
+FLI parameters of one foreign subprogram per entry point. The generated VHDL
+and everything above it is the same for all three. The interpreter is started
+on first use, is never restarted within a simulation, and uses no signal
+handlers of its own.
 
 Linux
   The bridge is compiled from source against the Python running VUnit the
   first time :meth:`add_python() <vunit.ui.VUnit.add_python>` is called, and
   cached in ``<output path>/python_bridge``. It is rebuilt automatically when
-  the source, the Python version or the Python installation changes. VUnit
+  the source, the Python version or the Python installation changes. For
+  Questa the FLI front end is compiled in too, against the ``mti.h`` of the
+  simulator, and the simulator installation is part of the cache key. VUnit
   ships no prebuilt Linux library.
 
 Windows
-  VUnit ships DLLs built with MSVC for each supported Python minor version
-  (``vunit/python_bridge/bin``). The matching DLL is copied to the output
-  path. Nothing is compiled. A development checkout of VUnit does not contain
-  the DLLs; they can be built with ``tools/build_python_bridge.py`` from an
-  MSVC developer prompt.
+  For NVC and GHDL, VUnit ships DLLs built with MSVC for each supported Python
+  minor version (``vunit/python_bridge/bin``). The matching DLL is copied to
+  the output path and nothing is compiled. A development checkout of VUnit
+  does not contain the DLLs; they can be built with
+  ``tools/build_python_bridge.py`` from an MSVC developer prompt. For Questa
+  the library must be linked against the simulator's ``mtipli``, so it is
+  built on first use with the MinGW GCC bundled with Questa, against the
+  headers and the import library of the Python running VUnit. That build is
+  untested.
 
 The bridge uses the full (version specific) CPython ABI rather than the
 Stable ABI since embedding the interpreter in the environment VUnit runs in
@@ -585,7 +601,12 @@ limited API.
 VUnit makes the simulator find the library automatically. NVC is given a
 ``--load`` option. GHDL gets the library directory in its dynamic library
 search path, plus a linker search path for the ahead-of-time compiled llvm
-and gcc backends. No simulator options need to be set by the user.
+and gcc backends. The FLI attributes generated for Questa name the library by
+absolute path, and the vsim processes VUnit starts are given
+``-noautoldlibpath`` on Linux so that the C++ runtime Questa bundles, which is
+often older than the one the Python extension modules of the environment
+(NumPy) were built against, does not take precedence over the one of the
+system. No simulator options need to be set by the user.
 
 Tested configurations
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -598,10 +619,12 @@ GHDL mcode                 6.0.0, 7.0.0-dev
 GHDL llvm-jit              6.0.0, 7.0.0-dev
 GHDL llvm                  6.0.0, 7.0.0-dev
 GHDL gcc                   6.0.0, 7.0.0-dev
+Questa (FLI)               Altera Starter FPGA Edition 2025.3
 ========================== ========================================================
 
 On Windows, CI tests NVC 1.22 and GHDL mcode (nightly) with Python 3.10, 3.12
 and 3.14.
 
-Questa Altera Starter FPGA Edition 2025.3 (FLI) is tested manually on Linux;
-Riviera-PRO/Active-HDL (VHPI) is not tested. Neither is covered by CI.
+Questa is tested manually on Linux and is not covered by CI; the Windows build
+of its bridge library is untested. Riviera-PRO/Active-HDL (VHPI) is not tested
+at all.

@@ -77,7 +77,7 @@ def main():
     vu.add_python()
     vu.add_random()
     # add_python() builds the foreign language application of the simulator
-    # (the Python bridge, or the FLI/VHPI application) under the output path.
+    # (the Python bridge, or the VHPI application) under the output path.
 
     lib = vu.add_library("lib")
     lib.add_source_files(root / "*.vhd")

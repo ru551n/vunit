@@ -11,9 +11,9 @@ The template holds the parts of python_pkg that are written by hand. The
 generated parts are the argument value types of call, the result types of eval
 and call and the execution of Python files. They are mostly one overload per
 type, which is why they are generated. The operations that are implemented by
-the Python bridge (NVC and GHDL only) are built on the p_ prefixed primitives
-of python_ffi_pkg, which the FLI and VHPI variants of that package implement
-by reporting a failure.
+the Python bridge (NVC, GHDL and Questa) are built on the p_ prefixed
+primitives of python_ffi_pkg, which the VHPI variant of that package
+implements by reporting a failure.
 """
 
 from pathlib import Path
@@ -39,8 +39,9 @@ ARG_SIGNATURE = ", ".join(["string"] + ["arg_t"] * len(ARGS) + ["python_session_
 # impure: true when the conversion can fail, which makes the functions impure
 # suffix: appended to the arg and kwarg names, empty for an overload
 # bridge: true when the value is transferred by the Python bridge, which makes
-#         it available for NVC and GHDL only. The other values are built from
-#         the Python source text of the value alone and work on any simulator.
+#         it available for NVC, GHDL and Questa only. The other values are
+#         built from the Python source text of the value alone and work on any
+#         simulator.
 #
 # The unsigned and signed values are passed to typed names, arg_unsigned and
 # arg_signed, on purpose: plain overloads would make a string literal

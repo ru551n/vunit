@@ -28,6 +28,8 @@ PACKAGE_PATH = Path(__file__).parent.resolve()
 NATIVE_PATH = PACKAGE_PATH / "native"
 # Prebuilt Windows DLLs, included in releases
 BINARY_PATH = PACKAGE_PATH / "bin"
+# Front end only compiled into the FLI variant of the library
+FLI_SOURCE_NAME = "fli.c"
 
 
 class PythonBridgeError(RuntimeError):
@@ -49,13 +51,27 @@ def check_python_build() -> None:
         raise PythonBridgeError(f"VHDL Python support requires CPython, not {sys.implementation.name}")
 
 
-def prepare_library(root: Path) -> Path:
+def library_file_name(fli: bool = False) -> str:
+    """
+    File name of the bridge library built on POSIX platforms.
+    """
+    return "libvunit_python_bridge_fli.so" if fli else "libvunit_python_bridge.so"
+
+
+def prepare_library(root: Path, simulator_prefix: Optional[Path] = None) -> Path:
     """
     Path of the bridge library for the running Python, built or selected under root.
+
+    :param simulator_prefix: Executable directory of a simulator calling the bridge through
+                             the FLI (Questa/ModelSim). The FLI variant of the library, which
+                             also contains native/fli.c, is then built against its headers.
+                             None selects the VHPIDIRECT variant used by NVC and GHDL.
     """
     if sys.platform == "win32":
+        if simulator_prefix is not None:
+            return _build_windows_fli_library(root, simulator_prefix)
         return _prepare_windows_library(root)
-    return _prepare_posix_library(root)
+    return _prepare_posix_library(root, simulator_prefix)
 
 
 def windows_dll_name(version_info: Optional[Tuple[int, ...]] = None) -> str:
@@ -180,11 +196,28 @@ def _compiler() -> List[str]:
     )
 
 
-def bridge_sources(native_path: Optional[Path] = None) -> List[Path]:
+def bridge_sources(native_path: Optional[Path] = None, fli: bool = False) -> List[Path]:
     """
-    The C source files of the bridge library.
+    The C source files of the bridge library. fli adds the FLI front end.
     """
-    return sorted((NATIVE_PATH if native_path is None else native_path).glob("*.c"))
+    path = NATIVE_PATH if native_path is None else native_path
+    sources = sorted(item for item in path.glob("*.c") if item.name != FLI_SOURCE_NAME)
+    if fli:
+        sources.append(path / FLI_SOURCE_NAME)
+    return sources
+
+
+def _fli_include_dir(simulator_prefix: Path) -> str:
+    """
+    Directory of mti.h, next to the executable directory of the simulator.
+    """
+    include = Path(simulator_prefix).resolve().parent / "include"
+    if not (include / "mti.h").is_file():
+        raise PythonBridgeError(
+            f"VHDL Python support needs the FLI header mti.h of the simulator to build the Python "
+            f"bridge library, but it was not found in {include!s}"
+        )
+    return str(include)
 
 
 def _source_fingerprint() -> str:
@@ -197,13 +230,11 @@ def _source_fingerprint() -> str:
     return digest.hexdigest()
 
 
-def _prepare_posix_library(root: Path) -> Path:
+def _posix_cache_directory(root: Path, python_library: Path, include_dirs: List[str]) -> Path:
     """
-    Compile the bridge for the running Python, reusing a cached build when possible.
+    Cache directory of a build: everything it depends on hashed into its name. The
+    include directories cover the FLI variant, whose simulator headers are among them.
     """
-    python_library = _python_library()
-    include_dirs = _include_dirs()
-
     key_items = [
         _source_fingerprint(),
         sys.platform,
@@ -217,27 +248,114 @@ def _prepare_posix_library(root: Path) -> Path:
     ]
     key = hashlib.sha256("\n".join(key_items).encode("utf-8")).hexdigest()[:16]
     tag = sysconfig.get_config_var("SOABI") or f"cp{sys.version_info[0]}{sys.version_info[1]}"
-    directory = root / f"{tag}-{key}"
-    library_file = directory / "libvunit_python_bridge.so"
+    return root / f"{tag}-{key}"
+
+
+def _prepare_posix_library(root: Path, simulator_prefix: Optional[Path] = None) -> Path:
+    """
+    Compile the bridge for the running Python, reusing a cached build when possible.
+
+    The FLI variant, selected with simulator_prefix, differs only in the added front end,
+    the added include directory and the file name, so both variants share this cache: the
+    simulator prefix is part of the key through its include directory.
+    """
+    fli = simulator_prefix is not None
+    python_library = _python_library()
+    include_dirs = _include_dirs()
+    if simulator_prefix is not None:
+        include_dirs = include_dirs + [_fli_include_dir(simulator_prefix)]
+
+    name = library_file_name(fli)
+    directory = _posix_cache_directory(root, python_library, include_dirs)
+    library_file = directory / name
     if library_file.is_file():
         return library_file
 
     compiler = _compiler()
     directory.mkdir(parents=True, exist_ok=True)
-    tmp = directory / f"libvunit_python_bridge.so.{os.getpid()}.tmp"
+    tmp = directory / f"{name}.{os.getpid()}.tmp"
     cmd = (
         compiler
         + ["-shared", "-fPIC", "-O2", "-fvisibility=hidden"]
         + [f"-I{path}" for path in include_dirs]
-        + [str(path) for path in bridge_sources()]
+        + [str(path) for path in bridge_sources(fli=fli)]
         + ["-o", str(tmp)]
-        + [str(python_library), f"-Wl,-rpath,{python_library.parent!s}", "-Wl,-soname,libvunit_python_bridge.so"]
+        + [str(python_library), f"-Wl,-rpath,{python_library.parent!s}", f"-Wl,-soname,{name}"]
         + (["-ldl"] if sys.platform.startswith("linux") else [])
     )
     try:
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     except OSError as exc:
         raise PythonBridgeError(f"Failed to run the C compiler {compiler[0]!r}: {exc}") from exc
+    if proc.returncode != 0:
+        tmp.unlink(missing_ok=True)
+        raise PythonBridgeError(
+            "Failed to build the Python bridge library:\n"
+            + " ".join(shlex.quote(item) for item in cmd)
+            + "\n"
+            + proc.stdout.decode(errors="replace")
+        )
+    os.replace(tmp, library_file)
+    return library_file
+
+
+def _questa_mingw_gcc(simulator_prefix: Path) -> str:
+    """
+    The MinGW gcc bundled with Questa/ModelSim, used for FLI applications on Windows.
+    """
+    matches = sorted(simulator_prefix.parent.glob("gcc*mingw64*"))
+    for match in matches:
+        gcc = match / "bin" / "gcc.exe"
+        if gcc.is_file():
+            return str(gcc.resolve())
+    raise PythonBridgeError(
+        "VHDL Python support on Windows needs the MinGW GCC bundled with Questa/ModelSim to build "
+        f"the Python bridge library, but it was not found in {simulator_prefix.parent!s}"
+    )
+
+
+def _build_windows_fli_library(root: Path, simulator_prefix: Path) -> Path:
+    """
+    Build the FLI variant on Windows with the MinGW gcc bundled with Questa/ModelSim, against the
+    headers and the import library of the Python running VUnit. The prebuilt DLLs cannot be used:
+    they are MSVC builds without the FLI front end, which has to be linked against the simulator's
+    own libmtipli. Reuses a cached build like the POSIX one.
+
+    Untested: this environment has no Windows installation of Questa.
+    """
+    simulator_prefix = Path(simulator_prefix).resolve()
+    include = _fli_include_dir(simulator_prefix)
+    gcc = _questa_mingw_gcc(simulator_prefix)
+    python_home = Path(sys.executable).parent.resolve()
+    python_include = python_home / "include"
+    python_libs = python_home / "libs"
+    if not (python_include / "Python.h").is_file():
+        raise PythonBridgeError(
+            f"VHDL Python support needs the Python development headers (Python.h) of {sys.executable} "
+            f"to build the Python bridge library, but they were not found in {python_include!s}"
+        )
+
+    key_items = [_source_fingerprint(), sys.version, str(python_home), str(simulator_prefix), gcc]
+    key = hashlib.sha256("\n".join(key_items).encode("utf-8")).hexdigest()[:16]
+    directory = root / f"cp{sys.version_info[0]}{sys.version_info[1]}-win_amd64-fli-{key}"
+    library_file = directory / "vunit_python_bridge_fli.dll"
+    if library_file.is_file():
+        return library_file
+
+    directory.mkdir(parents=True, exist_ok=True)
+    tmp = directory / f"vunit_python_bridge_fli.dll.{os.getpid()}.tmp"
+    cmd = (
+        [gcc, "-shared", "-m64", "-O2", "-D__USE_MINGW_ANSI_STDIO=1", "-freg-struct-return"]
+        + [f"-I{include}", f"-I{python_include!s}"]
+        + [str(path) for path in bridge_sources(fli=True)]
+        + ["-o", str(tmp)]
+        + [f"-L{python_libs!s}", f"-lpython{sys.version_info[0]}{sys.version_info[1]}"]
+        + [f"-L{simulator_prefix!s}", "-lmtipli"]
+    )
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
+    except OSError as exc:
+        raise PythonBridgeError(f"Failed to run the C compiler {gcc!r}: {exc}") from exc
     if proc.returncode != 0:
         tmp.unlink(missing_ok=True)
         raise PythonBridgeError(

@@ -4,9 +4,10 @@ example NumPy reference models, through the ``python_pkg`` API: ``exec``,
 latter also taking ``std_ulogic`` and arbitrarily wide ``unsigned``/``signed``
 argument values and keyword argument groups combined with ``&``. Enable with
 ``add_vhdl_builtins()`` followed by ``add_python()``. The operations
-implemented by the VUnit Python bridge are only available on NVC and GHDL:
-exchanging ``integer_array_t`` values as NumPy arrays, boolean, std_ulogic and
-width-checked vector results, executing files with ``exec_file`` and isolating
-models in named sessions. Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL
-(VHPI) use the applications of the upstream ``python_pkg`` branch, which
-``add_python()`` builds under the output path as well. See :ref:`python_bridge`.
+implemented by the VUnit Python bridge are available on NVC and GHDL
+(VHPIDIRECT) and on Questa/ModelSim (FLI): exchanging ``integer_array_t``
+values as NumPy arrays, boolean, std_ulogic and width-checked vector results,
+executing files with ``exec_file`` and isolating models in named sessions.
+Riviera-PRO/Active-HDL (VHPI) use the application of the upstream
+``python_pkg`` branch, which ``add_python()`` builds under the output path as
+well, and lack those operations. See :ref:`python_bridge`.

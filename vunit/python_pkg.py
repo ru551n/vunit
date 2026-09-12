@@ -6,19 +6,19 @@
 
 """
 Building the foreign language application that implements ``python_pkg``/``python_context``
-(see :ref:`python_bridge`) for Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL (VHPI).
+(see :ref:`python_bridge`) for Riviera-PRO/Active-HDL (VHPI).
 
-``setup_fli_application`` and ``setup_vhpi_application`` are called by :meth:`add_python()
-<vunit.ui.VUnit.add_python>`; the application is built under the output path on first use and
-rebuilt when its sources, the Python running VUnit or the simulator change.
-``compile_fli_application`` and ``compile_vhpi_application`` are the run script helpers of the
-upstream ``python_pkg`` branch, kept for compatibility.
+``setup_vhpi_application`` is called by :meth:`add_python() <vunit.ui.VUnit.add_python>`; the
+application is built under the output path on first use and rebuilt when its sources, the
+Python running VUnit or the simulator change. ``compile_vhpi_application`` is the run script
+helper of the upstream ``python_pkg`` branch, kept for compatibility.
 
-``compile_vhpidirect_nvc_application`` and ``compile_vhpidirect_ghdl_application`` are
-superseded by the VUnit Python bridge (``vunit.python_bridge``), which builds and loads
-the equivalent VHPIDIRECT application for NVC and GHDL automatically when :meth:`add_python()
-<vunit.ui.VUnit.add_python>` is called. They are kept here for reference only and are not
-used by VUnit itself.
+``setup_fli_application``/``compile_fli_application``, ``compile_vhpidirect_nvc_application``
+and ``compile_vhpidirect_ghdl_application`` build the upstream applications for
+Questa/ModelSim, NVC and GHDL. They are superseded by the VUnit Python bridge
+(``vunit.python_bridge``), which builds and loads the equivalent application for those
+simulators automatically when :meth:`add_python() <vunit.ui.VUnit.add_python>` is called, and
+are kept here for reference only. VUnit itself does not use them.
 """
 
 from pathlib import Path
@@ -35,10 +35,11 @@ SRC_PATH = Path(__file__).parent.resolve() / "vhdl" / "python" / "src"
 
 def setup_fli_application(output_path, simulator_class):
     """
-    Build the FLI application for Questa/ModelSim under the output path, unless the one already
-    there was built from the same sources for the same Python and simulator.
+    Build the upstream FLI application for Questa/ModelSim under the output path, unless the one
+    already there was built from the same sources for the same Python and simulator.
 
-    Called by :meth:`add_python() <vunit.ui.VUnit.add_python>`.
+    Kept for reference: :meth:`add_python() <vunit.ui.VUnit.add_python>` uses the VUnit Python
+    bridge on Questa/ModelSim.
     """
     # vsim runs with the simulator directory of the output path as its working directory, which
     # the relative path in the foreign attributes of python_pkg_fli.vhd refers to
@@ -61,10 +62,10 @@ def setup_vhpi_application(output_path, simulator_class):
 
 def compile_fli_application(run_script_root, vu):  # pylint: disable=unused-argument
     """
-    Compile FLI application used by Questa.
+    Compile the upstream FLI application used by Questa.
 
-    Kept for run scripts written for the upstream ``python_pkg`` branch. ``add_python()`` now
-    builds the application by itself, so this is a no-op when it was already built.
+    Kept for run scripts written for the upstream ``python_pkg`` branch. ``add_python()`` no
+    longer uses this application, so what it builds is only used by such a run script.
     """
     setup_fli_application(vu._output_path, vu._simulator_class)  # pylint: disable=protected-access
 

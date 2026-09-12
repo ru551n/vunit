@@ -5,10 +5,11 @@
  *
  * Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
  *
- * Internal header of the native bridge between VHDL (NVC/GHDL VHPIDIRECT) and
- * an embedded CPython interpreter. The bridge is a private implementation
- * detail of python_ffi_pkg: VHDL builds Python source text and the bridge
- * executes or evaluates it.
+ * Internal header of the native bridge between VHDL and an embedded CPython
+ * interpreter. The bridge is a private implementation detail of
+ * python_ffi_pkg: VHDL builds Python source text and the bridge executes or
+ * evaluates it. VHDL reaches the entry points below through VHPIDIRECT on NVC
+ * and GHDL and through the FLI front end in fli.c on Questa/ModelSim.
  *
  * Modules:
  *   error.c        error text reported to VHDL
@@ -16,8 +17,10 @@
  *   interpreter.c  starting the interpreter and loading ../runtime.py
  *   arguments.c    strings and integer_array_t values transferred from VHDL
  *   operations.c   setup, exec, eval and results transferred back to VHDL
+ *   fli.c          Questa/ModelSim front end, only built for that simulator
  *
- * ABI rules, chosen to be identical for NVC and GHDL on all platforms:
+ * ABI rules, chosen to be identical for NVC and GHDL on all platforms, and
+ * translated to the FLI parameter passing conventions by fli.c:
  *   - VHDL integer <-> int32_t, VHDL real <-> double.
  *   - Booleans are passed as integers (0/1), never as VHDL boolean.
  *   - Strings and integer vectors only cross the boundary as *constrained*
@@ -54,9 +57,11 @@
 #define VPY_ERROR 1
 
 /*
- * Entry points called from VHDL (declared in python_bridge_pkg.vhd.in).
- * Strings cross the boundary through a buffer; integer_array_t values are
- * pushed and staged, everything else is Python source text built by VHDL.
+ * Entry points called from VHDL (declared in python_bridge_pkg.vhd.in,
+ * directly for VHPIDIRECT and through the fli_ prefixed wrappers of fli.c for
+ * the FLI). Strings cross the boundary through a buffer; integer_array_t
+ * values are pushed and staged, everything else is Python source text built
+ * by VHDL.
  */
 VPY_EXPORT int32_t vpy_setup(void);
 VPY_EXPORT int32_t vpy_cleanup(void);
