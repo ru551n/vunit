@@ -22,6 +22,7 @@ end entity;
 
 architecture tb of tb_python_ext is
   constant std_ulogic_characters : string(1 to 9) := "UX01ZWLH-";
+  constant group_error : string := "Only keyword arguments can be combined with & into a keyword argument group";
 begin
   main : process
     constant golden : python_session_t := "golden";
@@ -34,6 +35,13 @@ begin
     variable result_vec9 : std_ulogic_vector(8 downto 0);
     variable s8 : signed(7 downto 0);
     variable u8 : unsigned(7 downto 0);
+    variable u1 : unsigned(0 downto 0) := "1";
+    variable u32 : unsigned(31 downto 0) := x"DEADBEEF";
+    variable u64 : unsigned(63 downto 0) := (others => '1');
+    variable u128 : unsigned(127 downto 0) := (others => '1');
+    variable s64 : signed(63 downto 0) := x"8000000000000000";
+    variable u_null : unsigned(0 downto 1);
+    variable s_null : signed(0 downto 1);
     variable discard_int : integer;
     variable reals : real_vector(0 to 2);
 
@@ -70,6 +78,18 @@ begin
         "    except BaseException as exc:" +
         "        return ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__.tb_next)).rstrip('\n')"
       );
+    end;
+
+    -- Python function showing the decimal value of its argument
+    procedure define_as_str is
+    begin
+      exec("def as_str(x):" + "    return str(x)");
+    end;
+
+    -- Python function returning one of its keyword arguments
+    procedure define_pick is
+    begin
+      exec("def pick(**kwargs):" + "    return kwargs['v']");
     end;
 
     -- Python function showing the source text of the arguments it is called with
@@ -472,8 +492,8 @@ begin
 
       elsif run("Test std_ulogic_vector, signed and unsigned arguments") then
         -- There are no arg overloads for these types, which would make a
-        -- string literal argument ambiguous. They are passed as a string and
-        -- as an integer instead.
+        -- string literal argument ambiguous. They are passed as a string, as
+        -- an integer or through arg_unsigned/arg_signed instead.
         define_describe;
         check_equal(call_string("describe", arg(to_string(slv9_desc))), "'UX01ZWLH-'");
         check_equal(call_string("describe", kwarg("v", to_string(std_ulogic_vector'("10XZ")))), "v='10XZ'");
@@ -507,6 +527,175 @@ begin
         set(arr, 0, 1);
         set(arr, 1, 2);
         bump_twice(arg(arr));
+
+      ---------------------------------------------------------------------
+      -- Keyword argument groups
+      ---------------------------------------------------------------------
+      elsif run("Test a keyword argument group") then
+        define_describe;
+        -- The group is a single argument and can be in any of the 10 slots
+        check_equal(call_string("describe", kwarg("a", 1) & kwarg("b", 2)), "a=1, b=2");
+        check_equal(
+          call_string("describe", arg(1), arg(string'("x")), kwarg("a", 1) & kwarg("b", 2) & kwarg("c", 3)),
+          "1, 'x', a=1, b=2, c=3"
+        );
+        check_equal(
+          call_string("describe", (kwarg("a", 1) & kwarg("b", 2)) & (kwarg("c", 3) & kwarg("d", 4))),
+          "a=1, b=2, c=3, d=4"
+        );
+
+      elsif run("Test 25 keyword arguments in one group") then
+        exec("def total(**kwargs):" + "    return sum(kwargs.values())");
+        check_equal(
+          integer'(call(
+            "total",
+            kwarg("a01", 1) & kwarg("a02", 2) & kwarg("a03", 3) & kwarg("a04", 4) & kwarg("a05", 5) &
+            kwarg("a06", 6) & kwarg("a07", 7) & kwarg("a08", 8) & kwarg("a09", 9) & kwarg("a10", 10) &
+            kwarg("a11", 11) & kwarg("a12", 12) & kwarg("a13", 13) & kwarg("a14", 14) & kwarg("a15", 15) &
+            kwarg("a16", 16) & kwarg("a17", 17) & kwarg("a18", 18) & kwarg("a19", 19) & kwarg("a20", 20) &
+            kwarg("a21", 21) & kwarg("a22", 22) & kwarg("a23", 23) & kwarg("a24", 24) & kwarg("a25", 25)
+          )),
+          325
+        );
+
+      elsif run("Test that null_arg is the identity of a keyword argument group") then
+        define_describe;
+        check_equal(call_string("describe", null_arg & kwarg("a", 1)), "a=1");
+        check_equal(call_string("describe", kwarg("a", 1) & null_arg), "a=1");
+        check_equal(call_string("describe", null_arg & null_arg), "");
+        check_equal(call_string("describe", null_arg & (kwarg("a", 1) & kwarg("b", 2)) & null_arg), "a=1, b=2");
+
+      elsif run("Test a keyword argument group with the result types of call") then
+        define_pick;
+        check_equal(integer'(call("pick", kwarg("v", 7) & kwarg("w", 0))), 7);
+        check_equal(real'(call("pick", kwarg("v", 1.5) & kwarg("w", 0))), 1.5);
+        check_equal(call_string("pick", kwarg("v", string'("x")) & kwarg("w", 0)), "x");
+        check_true(call_boolean("pick", kwarg("v", true) & kwarg("w", 0)));
+        check(
+          integer_vector'(call("pick", kwarg("v", integer_vector'(1, 2)) & kwarg("w", 0))) = integer_vector'(1, 2)
+        );
+
+        exec("recorded = 0" + "def record(**kwargs):" + "    global recorded" + "    recorded = kwargs['v']");
+        call("record", kwarg("v", 42) & kwarg("w", 0));
+        check_equal(eval_integer("recorded"), 42);
+
+      elsif run("Test that a repeated keyword in a group is a Python error") then
+        define_error_helper;
+        mock(python_logger, failure);
+        check_equal(call_string("describe", kwarg("a", 1) & kwarg("a", 2)), "");
+        check_only_log(
+          python_logger,
+          "eval(""describe(**dict(a=1, a=2))"") failed:" & LF &
+          call_string(
+            "expected_error", arg(string'("describe(**dict(a=1, a=2))")), arg(string'("<eval #1>")), arg(true)
+          ),
+          failure
+        );
+        unmock(python_logger);
+
+      elsif run("Test that a keyword argument group before a positional argument is a Python error") then
+        define_error_helper;
+        mock(python_logger, failure);
+        check_equal(call_string("describe", kwarg("a", 1) & kwarg("b", 2), arg(3)), "");
+        check_only_log(
+          python_logger,
+          "eval(""describe(**dict(a=1, b=2), 3)"") failed:" & LF &
+          call_string(
+            "expected_error", arg(string'("describe(**dict(a=1, b=2), 3)")), arg(string'("<eval #1>")), arg(true)
+          ),
+          failure
+        );
+        unmock(python_logger);
+
+      elsif run("Test that combining a positional argument with & fails") then
+        define_describe;
+        mock(python_logger, failure);
+        check_equal(call_string("describe", arg(1) & kwarg("a", 2)), "");
+        check_log(python_logger, group_error, failure);
+        check_equal(call_string("describe", kwarg("a", 2) & arg(1)), "");
+        check_log(python_logger, group_error, failure);
+        check_equal(call_string("describe", (kwarg("a", 1) & kwarg("b", 2)) & arg(3)), "");
+        check_only_log(python_logger, group_error, failure);
+        unmock(python_logger);
+
+      ---------------------------------------------------------------------
+      -- Wide and std_ulogic argument values
+      ---------------------------------------------------------------------
+      elsif run("Test unsigned arguments of any width") then
+        define_as_str;
+        check_equal(call_string("as_str", arg_unsigned(u1)), "1");
+        check_equal(call_string("as_str", arg_unsigned(unsigned'("0"))), "0");
+        check_equal(call_string("as_str", arg_unsigned(unsigned'(x"FF"))), "255");
+        check_equal(call_string("as_str", arg_unsigned(u32)), "3735928559");
+        check_equal(call_string("as_str", arg_unsigned(u64)), "18446744073709551615");
+        check_equal(
+          call_string("as_str", arg_unsigned(u128)), "340282366920938463463374607431768211455"
+        );
+        check_equal(call_string("as_str", arg_unsigned(u_null)), "0");
+
+        -- The value survives a round trip through Python
+        exec("def identity(x):" + "    return x");
+        call_unsigned("identity", u32, arg_unsigned(u32));
+        check_equal(u32, unsigned'(x"DEADBEEF"));
+
+      elsif run("Test signed arguments including the lowest value") then
+        define_as_str;
+        check_equal(call_string("as_str", arg_signed(signed'(x"7F"))), "127");
+        check_equal(call_string("as_str", arg_signed(signed'("0"))), "0");
+        check_equal(call_string("as_str", arg_signed(signed'("1"))), "-1");
+        check_equal(call_string("as_str", arg_signed(to_signed(-1, 8))), "-1");
+        check_equal(call_string("as_str", arg_signed(to_signed(-128, 8))), "-128");
+        check_equal(call_string("as_str", arg_signed(s64)), "-9223372036854775808");
+        check_equal(call_string("as_str", arg_signed(s_null)), "0");
+
+        exec("def identity(x):" + "    return x");
+        call_signed("identity", s8, arg_signed(to_signed(-128, 8)));
+        check_equal(s8, to_signed(-128, 8));
+
+      elsif run("Test that H and L are read as 1 and 0 in argument values") then
+        define_as_str;
+        check_equal(call_string("as_str", arg_unsigned(unsigned'("HLHLHLHL"))), "170");
+        check_equal(call_string("as_str", arg_signed(signed'("HLHL"))), "-6");
+        define_describe;
+        check_equal(call_string("describe", arg('H'), arg('L')), "True, False");
+
+      elsif run("Test that a metavalue in an unsigned or signed argument fails") then
+        define_describe;
+        mock(python_logger, failure);
+        check_equal(call_string("describe", arg_unsigned(unsigned'("1010X010"))), "");
+        check_log(
+          python_logger, "arg_unsigned cannot convert ""1010X010""; the value has metavalues", failure
+        );
+        check_equal(call_string("describe", arg_signed(signed'("10Z0"))), "");
+        check_log(python_logger, "arg_signed cannot convert ""10Z0""; the value has metavalues", failure);
+        check_equal(call_string("describe", kwarg_unsigned("v", unsigned'("U"))), "");
+        check_only_log(
+          python_logger, "kwarg_unsigned cannot convert ""U""; the value has metavalues", failure
+        );
+        unmock(python_logger);
+
+      elsif run("Test std_ulogic arguments") then
+        define_describe;
+        check_equal(call_string("describe", arg('1'), arg('0')), "True, False");
+        check_equal(call_string("describe", kwarg("v", '1'), kwarg("w", 'L')), "v=True, w=False");
+
+      elsif run("Test that a metavalue std_ulogic argument fails") then
+        define_describe;
+        mock(python_logger, failure);
+        check_equal(call_string("describe", arg('X')), "");
+        check_log(python_logger, "arg cannot convert 'X'; expected '0', '1', 'L' or 'H'", failure);
+        check_equal(call_string("describe", kwarg("v", '-')), "");
+        check_only_log(python_logger, "kwarg cannot convert '-'; expected '0', '1', 'L' or 'H'", failure);
+        unmock(python_logger);
+
+      elsif run("Test keyword forms of the typed argument values") then
+        define_describe;
+        check_equal(call_string("describe", kwarg_unsigned("v", unsigned'(x"FF"))), "v=255");
+        check_equal(call_string("describe", kwarg_signed("v", to_signed(-3, 4))), "v=-3");
+        check_equal(
+          call_string("describe", kwarg_unsigned("v", u64) & kwarg_signed("w", s64)),
+          "v=18446744073709551615, w=-9223372036854775808"
+        );
 
       ---------------------------------------------------------------------
       -- integer_array_t
