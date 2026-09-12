@@ -272,25 +272,42 @@ given by name since it follows the positional arguments:
     -- No return value: the procedure form of call
     call("print", arg(35), arg(77), arg(119));
 
-``arg`` and ``kwarg`` accept ``integer``, ``real``, ``boolean``, ``string``
-and ``integer_vector`` values, and on NVC and GHDL also ``real_vector``,
-``integer_vector_ptr_t`` and ``integer_array_t``
-(:ref:`python_bridge:integer_array`) values. Vectors become Python lists.
+``arg`` and ``kwarg`` accept these value types:
+
+========================== ========================================================
+VHDL                       Python
+========================== ========================================================
+``integer``                ``int``
+``real``                   ``float``
+``boolean``                ``bool``
+``string``                 ``str``
+``integer_vector``         ``list`` of ``int``
+``real_vector``            ``list`` of ``float``
+``integer_vector_ptr_t``   ``list`` of ``int``
+``std_ulogic``             ``bool``, 1 and H give ``True``, 0 and L give ``False``
+``unsigned``               ``int``, passed as ``arg_unsigned``/``kwarg_unsigned``
+``signed``                 ``int``, passed as ``arg_signed``/``kwarg_signed``
+``integer_array_t``        NumPy array, on NVC and GHDL only
+========================== ========================================================
+
+An ``unsigned`` or ``signed`` value of any width becomes an exact Python
+integer, so it is not limited to the range of a VHDL ``integer``. The two have
+names of their own rather than ``arg`` overloads, since a string literal
+belongs to every character array type and an overload would therefore make
+``arg("hello")`` ambiguous. ``H`` and ``L`` are read as 1 and 0 in a
+``std_ulogic``, ``unsigned`` or ``signed`` value; any other metavalue is an
+error.
 
 An aggregate or a literal does not select an overload by itself and needs a
 qualified expression: ``arg(real_vector'(1.0, 2.0))``,
-``arg(integer_vector'(1, 2, 3))``. Values of the remaining types are passed
-through a conversion, a ``std_ulogic_vector`` as the string of its
-characters and a ``signed`` or ``unsigned`` value as an integer:
+``arg(integer_vector'(1, 2, 3))``. There is no ``std_ulogic_vector`` value,
+which would be ambiguous for the same reason as ``unsigned``. Such a value is
+passed as a number or as the string of its characters:
 
 .. code-block:: vhdl
 
+    call("model.scale", arg_unsigned(unsigned(gain)));
     call("model.push", arg(to_string(slv)));
-    call("model.scale", arg(to_integer(gain)));
-
-There are deliberately no ``arg``/``kwarg`` overloads for ``std_ulogic``,
-``std_ulogic_vector``, ``signed`` and ``unsigned``: they would make a string
-literal argument, ``arg("hello")``, ambiguous.
 
 On NVC and GHDL, ``call`` returns the same additional types as ``eval``:
 ``call_boolean``, ``call_std_ulogic``, ``call_std_ulogic_vector``,
@@ -309,6 +326,24 @@ is useful to embed a call inside a larger ``exec``/``eval`` string:
 
 Every unused trailing argument of ``call``/``to_call_str`` defaults to an
 ignored placeholder, so calls with fewer than 10 arguments need no padding.
+
+Keyword argument groups
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Keyword arguments combined with ``&`` become a single argument, which makes it
+possible to pass more than 10 keyword arguments and to build the keyword
+arguments of a call in steps. ``null_arg`` is the identity of the operation and
+only keyword arguments, or groups of them, can be combined:
+
+.. code-block:: vhdl
+
+    -- Calls plot(data, **dict(title="Step response", grid=True))
+    call("plot", arg(data), kwarg("title", string'("Step response")) & kwarg("grid", true));
+
+The group is passed to Python as ``**dict(...)`` and therefore keeps Python's
+own rules: it must come after the positional arguments of the call and a
+keyword must not be repeated within it. It uses one of the 10 argument slots,
+no matter how many keyword arguments it holds.
 
 import_run_script
 ------------------
