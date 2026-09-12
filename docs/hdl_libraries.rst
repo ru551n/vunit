@@ -24,9 +24,10 @@ VUnit includes several optional libraries in a group named *VHDL builtins* (see 
 Most of the utilities are based on some internal data types providing dynamic arrays and queues (FIFOs).
 See :ref:`data_types_library`.
 
-With ``add_vhdl_builtins(python=True)``, the builtins also include
-:vunit_file:`python_bridge <vunit/vhdl/python_bridge>`, which lets testbenches execute Python code and call Python functions
-(NVC and GHDL only). See :ref:`python_bridge`.
+With :meth:`add_python() <vunit.ui.VUnit.add_python>`, testbenches can also execute Python code and call Python
+functions through :vunit_file:`python <vunit/vhdl/python>` (``context vunit_lib.python_context;``). NVC and GHDL are
+built in; Questa/ModelSim and Riviera-PRO/Active-HDL are supported through helpers in ``vunit.python_pkg``.
+See :ref:`python_bridge`.
 
 Communication
 -------------

@@ -5,7 +5,18 @@
 # Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 
 """
-Temporary helper module to compile C-code used by python_pkg.
+Helpers, used from a run script, to compile the foreign language application that
+implements ``python_pkg``/``python_context`` (see :ref:`python_bridge`) for a given
+simulator.
+
+``compile_fli_application`` and ``compile_vhpi_application`` are used for Questa/ModelSim
+(FLI) and Riviera-PRO/Active-HDL (VHPI) respectively.
+
+``compile_vhpidirect_nvc_application`` and ``compile_vhpidirect_ghdl_application`` are
+superseded by the VUnit Python bridge (``vunit.python_bridge``), which builds and loads
+the equivalent VHPIDIRECT application for NVC and GHDL automatically when :meth:`add_python()
+<vunit.ui.VUnit.add_python>` is called. They are kept here for reference only and are not
+used by VUnit itself.
 """
 
 from pathlib import Path
