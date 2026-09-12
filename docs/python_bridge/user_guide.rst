@@ -356,11 +356,13 @@ Extensions
 ``python_ext_pkg`` adds argument value types, result types and features that
 are not part of the reference implementation.
 
-Bringing the additional overloads into scope makes some calls that used to be
-unambiguous ambiguous: a string literal such as ``arg("1010")`` or
-``eval("stimuli")`` can now also be read as a ``std_ulogic_vector``, ``signed``
-or ``unsigned`` value. Qualify the literal (``arg(string'("1010"))``) or use
-the explicit ``eval_string``/``call_string`` name to disambiguate.
+Bringing the additional overloads into scope makes string literal arguments
+ambiguous: ``arg("hello")`` can now also be read as a ``std_ulogic_vector``,
+``signed`` or ``unsigned`` value, so qualify the literal
+(``arg(string'("hello"))``). Variables are unaffected. ``std_ulogic_vector``
+results are only available under their explicit names
+(``eval_std_ulogic_vector``, ``call_std_ulogic_vector``), which keeps
+``check_equal(eval("17"), 17)`` unambiguous.
 
 Additional argument values
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~

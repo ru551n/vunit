@@ -215,14 +215,12 @@ begin
       -- Result types
       ---------------------------------------------------------------------
       elsif run("Test the upstream eval and call forms with the extensions visible") then
-        -- The extensions add eval and call aliases returning std_ulogic_vector.
-        -- Together with the check_equal overload taking a natural that makes
-        -- the upstream form check_equal(eval("17"), 17) ambiguous, so a
-        -- qualified expression or the explicit eval_integer name is needed
-        -- when python_ext_pkg is used. Everything else is unaffected.
-        check_equal(integer'(eval("17")), 17);
-        check_equal(real'(eval("3.5")), 3.5);
-        check_equal(integer'(call("len", arg(string'("Hello")))), 5);
+        -- The upstream forms keep working with the extensions in scope; only
+        -- string literal arguments need qualification since arg is also
+        -- overloaded for std_ulogic_vector, signed and unsigned.
+        check_equal(eval("17"), 17);
+        check_equal(eval("3.5"), 3.5);
+        check_equal(call("len", arg(string'("Hello"))), 5);
         check_equal(call("round", arg(3.14159), kwarg("ndigits", 3)), 3.142);
         exec("l = [1]");
         call("l.append", arg(2));

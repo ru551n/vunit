@@ -142,6 +142,9 @@ RESULTS = [
         default='""',
         upstream_eval=False,
         upstream_call=False,
+        # No eval/call alias: check_equal(eval("17"), 17) would otherwise be ambiguous
+        # with check_equal(std_ulogic_vector, natural). Use the explicit names.
+        alias=False,
     ),
     dict(
         name="integer_array",
@@ -241,7 +244,8 @@ def eval_declarations():
         lines.append(f"  impure function eval_{result['name']}(")
         lines.append(f"    expr : string; {SESSION}")
         lines.append(f"  ) return {result['vhdl']};")
-        lines.append(f"  alias eval is eval_{result['name']}[string, python_session_t return {result['vhdl']}];")
+        if result.get("alias", True):
+            lines.append(f"  alias eval is eval_{result['name']}[string, python_session_t return {result['vhdl']}];")
         lines.append("")
     for result in PROCEDURE_RESULTS:
         lines.append(f"  procedure eval_{result['name']}(")
@@ -303,8 +307,9 @@ def call_declarations():
         lines.append(f"    identifier : string; {ARG_PARAMETERS};")
         lines.append(f"    {SESSION}")
         lines.append(f"  ) return {result['vhdl']};")
-        lines.append(f"  alias call is {name}[")
-        lines.append(f"    {ARG_SIGNATURE} return {result['vhdl']}];")
+        if result.get("alias", True):
+            lines.append(f"  alias call is {name}[")
+            lines.append(f"    {ARG_SIGNATURE} return {result['vhdl']}];")
         lines.append("")
     for result in PROCEDURE_RESULTS:
         lines.append(f"  procedure call_{result['name']}(")
