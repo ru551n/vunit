@@ -31,7 +31,11 @@ static void py_error_handler(const char* context, const char* code_or_expr,
     if (ptype != NULL) {
       reason = get_string(pvalue);
     }
-    PyErr_Restore(ptype, pvalue, ptraceback);
+    // The reason has been extracted. The exception must not be left set:
+    // Py_FinalizeEx in python_cleanup would fail on it.
+    Py_XDECREF(ptype);
+    Py_XDECREF(pvalue);
+    Py_XDECREF(ptraceback);
   }
 
   // Clean-up Python session first in case vhpi_assert stops the simulation

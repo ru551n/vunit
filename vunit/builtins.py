@@ -29,6 +29,7 @@ except ModuleNotFoundError:
 from vunit.vhdl_standard import VHDL, VHDLStandard
 from vunit.ui.common import get_checked_file_names_from_globs
 from vunit.about import version, VUnitVersion
+from vunit.python_pkg import setup_fli_application, setup_vhpi_application
 
 
 LOGGER = logging.getLogger(__name__)
@@ -517,10 +518,25 @@ in your VUnit Git repository? You have to do this first if installing using setu
         self._vunit_lib.add_source_file(src_path / "python_pkg.vhd")
         if "VHPI" in simulator_supported_flis:
             self._vunit_lib.add_source_file(src_path / "python_pkg_vhpi.vhd")
+            self._setup_python_application(setup_vhpi_application)
         elif "FLI" in simulator_supported_flis:
             self._vunit_lib.add_source_file(src_path / "python_pkg_fli.vhd")
+            self._setup_python_application(setup_fli_application)
         else:
             self._add_python_bridge()
+
+    def _setup_python_application(self, setup):
+        """
+        Build the FLI or VHPI application of the Python package under the output path when needed.
+        """
+        try:
+            setup(
+                self._vunit_obj._output_path,  # pylint: disable=protected-access
+                self._simulator_class,
+            )
+        except RuntimeError as exc:
+            LOGGER.error("%s", exc)
+            sys.exit(1)
 
     def _add_python_bridge(self):
         """

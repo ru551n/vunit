@@ -178,13 +178,16 @@ class TestAddPython(unittest.TestCase):
         self.assertIn("VHPIDIRECT_NVC", str(ctx.exception))
         self.assertIn("VHPIDIRECT_GHDL", str(ctx.exception))
 
-    def test_vhpi_adds_python_pkg_vhpi_and_no_bridge(self):
+    def test_vhpi_adds_python_pkg_vhpi_and_builds_the_application(self):
         simulator = self._simulator_with_flis("rivierapro", {"VHPI"})
         builtins = self._builtins(simulator=simulator)
         builtins.add_vhdl_builtins()
-        with mock.patch("vunit.python_bridge.bridge.setup") as setup_mock:
+        with mock.patch("vunit.python_bridge.bridge.setup") as setup_mock, mock.patch(
+            "vunit.builtins.setup_vhpi_application"
+        ) as vhpi_mock:
             builtins.add("python")
         setup_mock.assert_not_called()
+        vhpi_mock.assert_called_once_with(builtins._vunit_obj._output_path, simulator)  # pylint: disable=protected-access
 
         src_path = VHDL_PATH / "python" / "src"
         added_files = self._added_files()
@@ -193,13 +196,27 @@ class TestAddPython(unittest.TestCase):
         self.assertIn(src_path / "python_pkg_vhpi.vhd", added_files)
         self.assertNotIn(src_path / "python_pkg_fli.vhd", added_files)
 
-    def test_fli_adds_python_pkg_fli_and_no_bridge(self):
+    def test_application_build_failure_is_reported(self):
         simulator = self._simulator_with_flis("modelsim", {"FLI"})
         builtins = self._builtins(simulator=simulator)
         builtins.add_vhdl_builtins()
-        with mock.patch("vunit.python_bridge.bridge.setup") as setup_mock:
+        with mock.patch("vunit.builtins.setup_fli_application", side_effect=RuntimeError("no compiler")), mock.patch(
+            "vunit.builtins.LOGGER"
+        ) as logger:
+            with self.assertRaises(SystemExit):
+                builtins.add("python")
+        logger.error.assert_called_once_with("%s", mock.ANY)
+
+    def test_fli_adds_python_pkg_fli_and_builds_the_application(self):
+        simulator = self._simulator_with_flis("modelsim", {"FLI"})
+        builtins = self._builtins(simulator=simulator)
+        builtins.add_vhdl_builtins()
+        with mock.patch("vunit.python_bridge.bridge.setup") as setup_mock, mock.patch(
+            "vunit.builtins.setup_fli_application"
+        ) as fli_mock:
             builtins.add("python")
         setup_mock.assert_not_called()
+        fli_mock.assert_called_once_with(builtins._vunit_obj._output_path, simulator)  # pylint: disable=protected-access
 
         src_path = VHDL_PATH / "python" / "src"
         added_files = self._added_files()
@@ -806,3 +823,58 @@ class TestSimulatorIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestForeignApplicationBuild(unittest.TestCase):
+    """
+    The FLI/VHPI application is built under the output path once and rebuilt when its inputs change.
+    """
+
+    @staticmethod
+    def _simulator(prefix):
+        simulator = mock.Mock()
+        simulator.name = "modelsim"
+        simulator.find_prefix.return_value = str(prefix)
+        return simulator
+
+    def test_builds_once_and_rebuilds_when_the_fingerprint_changes(self):
+        from vunit import python_pkg  # pylint: disable=import-outside-toplevel
+
+        with create_tempdir() as tempdir:
+            output_path = Path(tempdir) / "out"
+            simulator = self._simulator(Path(tempdir) / "questa" / "bin")
+            target = output_path / "modelsim" / "libraries" / "python" / "python_fli.so"
+
+            def fake_build(target, sources, simulator_prefix):  # pylint: disable=unused-argument
+                target.write_text("built", encoding="utf-8")
+
+            with mock.patch.object(python_pkg, "_build_fli", side_effect=fake_build) as build:
+                python_pkg.setup_fli_application(output_path, simulator)
+                python_pkg.setup_fli_application(output_path, simulator)
+            self.assertEqual(build.call_count, 1)
+            self.assertTrue(target.exists())
+            self.assertTrue(target.with_suffix(".so.fingerprint").exists())
+
+            # Another simulator installation changes the fingerprint
+            other = self._simulator(Path(tempdir) / "other" / "bin")
+            with mock.patch.object(python_pkg, "_build_fli", side_effect=fake_build) as build:
+                python_pkg.setup_fli_application(output_path, other)
+            self.assertEqual(build.call_count, 1)
+
+            # A missing library is rebuilt even with a matching fingerprint
+            target.unlink()
+            with mock.patch.object(python_pkg, "_build_fli", side_effect=fake_build) as build:
+                python_pkg.setup_fli_application(output_path, other)
+            self.assertEqual(build.call_count, 1)
+
+    def test_failed_build_leaves_no_fingerprint(self):
+        from vunit import python_pkg  # pylint: disable=import-outside-toplevel
+
+        with create_tempdir() as tempdir:
+            output_path = Path(tempdir) / "out"
+            simulator = self._simulator(Path(tempdir) / "questa" / "bin")
+            with mock.patch.object(python_pkg, "_build_fli", side_effect=RuntimeError("boom")):
+                with self.assertRaises(RuntimeError):
+                    python_pkg.setup_fli_application(output_path, simulator)
+            self.assertFalse(list((output_path / "modelsim" / "libraries" / "python").glob("*.fingerprint")))
+
