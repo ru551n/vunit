@@ -1,0 +1,271 @@
+$license
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+use work.integer_array_pkg.all;
+use work.integer_vector_ptr_pkg.all;
+use work.logger_pkg.all;
+use work.python_bridge_pkg.all;
+use work.python_ffi_pkg.all;
+use work.python_pkg.all;
+
+use std.textio.all;
+
+package body python_ext_pkg is
+  constant p_no_integers : integer_vector(0 downto 1) := (others => 0);
+  constant p_no_reals : real_vector(0 downto 1) := (others => 0.0);
+
+  -- Python represents std_ulogic values by these characters
+  constant p_std_ulogic_characters : string(1 to 9) := "UX01ZWLH-";
+
+  -----------------------------------------------------------------------------
+  -- Conversions
+  -----------------------------------------------------------------------------
+  function p_to_character(value : std_ulogic) return character is
+  begin
+    return p_std_ulogic_characters(std_ulogic'pos(value) + 1);
+  end;
+
+  function p_to_std_ulogic(value : character) return std_ulogic is
+  begin
+    for idx in p_std_ulogic_characters'range loop
+      if p_std_ulogic_characters(idx) = value then
+        return std_ulogic'val(idx - 1);
+      end if;
+    end loop;
+    -- The bridge only returns the characters above
+    return 'X';
+  end;
+
+  -- The characters of the elements from left to right, independent of the range direction
+  function p_to_characters(value : std_ulogic_vector) return string is
+    alias normalized : std_ulogic_vector(1 to value'length) is value;
+    variable result : string(1 to value'length);
+  begin
+    for idx in result'range loop
+      result(idx) := p_to_character(normalized(idx));
+    end loop;
+    return result;
+  end;
+
+  -- The elements of the characters, the first character becoming the leftmost element
+  function p_to_std_ulogic_vector(value : string) return std_ulogic_vector is
+    alias normalized : string(1 to value'length) is value;
+    variable result : std_ulogic_vector(value'length - 1 downto 0);
+  begin
+    for idx in normalized'range loop
+      result(value'length - idx) := p_to_std_ulogic(normalized(idx));
+    end loop;
+    return result;
+  end;
+
+  impure function p_to_integer_vector_ptr(vec : integer_vector) return integer_vector_ptr_t is
+    alias normalized : integer_vector(0 to vec'length - 1) is vec;
+    constant result : integer_vector_ptr_t := new_integer_vector_ptr(vec'length);
+  begin
+    for idx in normalized'range loop
+      set(result, idx, normalized(idx));
+    end loop;
+    return result;
+  end;
+
+  -- Decimal text of the unsigned integer with the bits, most significant
+  -- first, given as the characters '0' and '1'. The precision is arbitrary:
+  -- signed and unsigned values are not limited to the range of an integer.
+  function p_to_decimal(bits : string) return string is
+    -- A bit is log10(2) = 0.302 decimal digits, plus one for the rounding and one for the value zero
+    constant max_digits : positive := (bits'length * 302) / 1000 + 2;
+    variable digits : integer_vector(0 to max_digits - 1) := (others => 0);
+    variable text : string(1 to max_digits);
+    variable top : natural := 0;
+    variable carry, value : natural;
+  begin
+    for idx in bits'range loop
+      carry := character'pos(bits(idx)) - character'pos('0');
+      for digit in 0 to top loop
+        value := digits(digit) * 2 + carry;
+        digits(digit) := value mod 10;
+        carry := value / 10;
+      end loop;
+      if carry /= 0 then
+        top := top + 1;
+        digits(top) := carry;
+      end if;
+    end loop;
+
+    for digit in 0 to top loop
+      text(max_digits - digit) := character'val(character'pos('0') + digits(digit));
+    end loop;
+    return text(max_digits - top to max_digits);
+  end;
+
+  -- Decimal text of the two's complement integer with the bits
+  function p_to_signed_decimal(bits : string) return string is
+    variable magnitude : string(bits'range);
+    variable carry : boolean := true;
+    variable bit_value : character;
+  begin
+    if bits'length = 0 or bits(bits'left) = '0' then
+      return p_to_decimal(bits);
+    end if;
+
+    -- Negate: invert the bits and add one
+    for idx in bits'reverse_range loop
+      if bits(idx) = '0' then
+        bit_value := '1';
+      else
+        bit_value := '0';
+      end if;
+
+      if not carry then
+        magnitude(idx) := bit_value;
+      elsif bit_value = '1' then
+        magnitude(idx) := '0';
+      else
+        magnitude(idx) := '1';
+        carry := false;
+      end if;
+    end loop;
+    return "-" & p_to_decimal(magnitude);
+  end;
+
+  -- The bits of a signed or unsigned value as the characters '0' and '1'.
+  -- Weak values count as their strong counterparts, other metavalues cannot be
+  -- converted and give an empty string after reporting the failure.
+  impure function p_to_bits(value : std_ulogic_vector; type_name : string; operation : string) return string is
+    alias normalized : std_ulogic_vector(1 to value'length) is value;
+    variable result : string(1 to value'length);
+  begin
+    for idx in result'range loop
+      case normalized(idx) is
+        when '0' | 'L' =>
+          result(idx) := '0';
+        when '1' | 'H' =>
+          result(idx) := '1';
+        when others =>
+          failure(
+            python_logger,
+            operation & " failed:" & LF & "Cannot convert the " & type_name & " value """ &
+            p_to_characters(value) & """ containing metavalues to a Python int"
+          );
+          return "";
+      end case;
+    end loop;
+    return result;
+  end;
+
+  -----------------------------------------------------------------------------
+  -- The Python expression calling identifier with the given arguments
+  -----------------------------------------------------------------------------
+  function p_to_call_str(
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+  ) return string is
+    variable result : line;
+    variable first : boolean := true;
+
+    procedure append(value : arg_t) is
+    begin
+      if value.name = p_ignore_arg then
+        return;
+      end if;
+      if not first then
+        swrite(result, ", ");
+      end if;
+      first := false;
+      if value.name = p_positional_arg then
+        swrite(result, value.value);
+      else
+        swrite(result, value.name & "=" & value.value);
+      end if;
+    end;
+  begin
+    swrite(result, identifier & "(");
+    append(arg1);
+    append(arg2);
+    append(arg3);
+    append(arg4);
+    append(arg5);
+    append(arg6);
+    append(arg7);
+    append(arg8);
+    append(arg9);
+    append(arg10);
+    swrite(result, ")");
+
+    return result.all;
+  end;
+
+  -----------------------------------------------------------------------------
+  -- arg and kwarg
+  -----------------------------------------------------------------------------
+  -- The Python source text of an argument value. The operation is only used to
+  -- report a value that cannot be converted, which gives an empty string.
+  function p_arg_value(value : std_ulogic; operation : string) return string is
+  begin
+    return "'" & p_to_character(value) & "'";
+  end;
+
+  function p_arg_value(value : std_ulogic_vector; operation : string) return string is
+  begin
+    return "'" & p_to_characters(value) & "'";
+  end;
+
+  impure function p_arg_value(value : signed; operation : string) return string is
+    constant bits : string := p_to_bits(std_ulogic_vector(value), "signed", operation);
+  begin
+    if bits'length /= value'length then
+      return "";
+    end if;
+    return p_to_signed_decimal(bits);
+  end;
+
+  impure function p_arg_value(value : unsigned; operation : string) return string is
+    constant bits : string := p_to_bits(std_ulogic_vector(value), "unsigned", operation);
+  begin
+    if bits'length /= value'length then
+      return "";
+    end if;
+    return p_to_decimal(bits);
+  end;
+
+  function p_arg_value(value : real_vector; operation : string) return string is
+  begin
+    return to_py_list_str(value);
+  end;
+
+  impure function p_arg_value(value : integer_vector_ptr_t; operation : string) return string is
+  begin
+    return to_py_list_str(value);
+  end;
+
+  impure function p_arg_value(value : integer_array_t; operation : string) return string is
+    constant staged_id : integer := p_stage_array(value, operation);
+  begin
+    if staged_id < 1 then
+      return "";
+    end if;
+    return "__vunit__.staged(" & integer'image(staged_id) & ")";
+  end;
+
+$arg_functions
+
+  -----------------------------------------------------------------------------
+  -- exec
+  -----------------------------------------------------------------------------
+  procedure exec_file(file_name : string; session : python_session_t := default_session) is
+    variable ok : boolean;
+  begin
+    ok := p_exec(file_name, 1, p_exec_file_operation(file_name, session), session);
+  end;
+
+  -----------------------------------------------------------------------------
+  -- eval
+  -----------------------------------------------------------------------------
+$eval_subprograms
+
+  -----------------------------------------------------------------------------
+  -- call
+  -----------------------------------------------------------------------------
+$call_subprograms
+end package body;

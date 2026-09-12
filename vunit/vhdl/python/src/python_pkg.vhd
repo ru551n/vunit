@@ -19,8 +19,10 @@ package python_pkg is
   -- TODO: Consider detecting and handling the case where the imported file
   -- has no __name__ = "__main__" guard. This is typical for run scripts and
   -- people not used to it will make mistakes.
-  procedure import_module_from_file(module_path, as_module_name : string);
-  procedure import_run_script(module_name : string := "");
+  procedure import_module_from_file(
+    module_path, as_module_name : string; session : python_session_t := default_session
+  );
+  procedure import_run_script(module_name : string := ""; session : python_session_t := default_session);
 
   function to_py_list_str(vec : integer_vector) return string;
   impure function to_py_list_str(vec : integer_vector_ptr_t) return string;
@@ -28,8 +30,10 @@ package python_pkg is
 
   function "+"(l, r : string) return string;
 
-  impure function eval_integer_vector_ptr(expr : string) return integer_vector_ptr_t;
-  alias eval is eval_integer_vector_ptr[string return integer_vector_ptr_t];
+  impure function eval_integer_vector_ptr(
+    expr : string; session : python_session_t := default_session
+  ) return integer_vector_ptr_t;
+  alias eval is eval_integer_vector_ptr[string, python_session_t return integer_vector_ptr_t];
 
   -- TODO: Questa crashes unless this function is impure
   impure function to_call_str(
@@ -56,26 +60,31 @@ package python_pkg is
   function kwarg(kw : string; value : boolean) return arg_t;
 
   impure function call_integer_w_arg(
-    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
+    session : python_session_t := default_session
   ) return integer;
   alias call is call_integer_w_arg[
-    string, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t return integer];
+    string, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, python_session_t return integer];
 
   procedure call(
-    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
+    session : python_session_t := default_session
   );
 
   impure function call_integer_vector(
-    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
+    session : python_session_t := default_session
   ) return integer_vector;
   alias call is call_integer_vector[
-    string, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t return integer_vector];
+    string, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, python_session_t
+    return integer_vector];
 
   impure function call_real(
-    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
+    session : python_session_t := default_session
   ) return real;
   alias call is call_real[
-    string, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t return real];
+    string, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, python_session_t return real];
 
 
 
@@ -83,7 +92,9 @@ end package;
 
 package body python_pkg is
   -- @formatter:off
-  procedure import_module_from_file(module_path, as_module_name : string) is
+  procedure import_module_from_file(
+    module_path, as_module_name : string; session : python_session_t := default_session
+  ) is
     constant spec_name : string := "__" & as_module_name & "_spec";
     constant code : string :=
     "from importlib.util import spec_from_file_location, module_from_spec" & LF &
@@ -94,11 +105,11 @@ package body python_pkg is
     "sys.modules['" & as_module_name & "'] = " & as_module_name & LF &
      spec_name & ".loader.exec_module(" & as_module_name & ")";
   begin
-    exec(code);
+    exec(code, session);
   end;
   -- @formatter:on
 
-  procedure import_run_script(module_name : string := "") is
+  procedure import_run_script(module_name : string := ""; session : python_session_t := default_session) is
     constant script_path : string := run_script_path(get_cfg(runner_state));
     variable path_items : lines_t;
     variable script_name : line;
@@ -120,13 +131,13 @@ package body python_pkg is
       deallocate(script_name);
       for idx in path_items'range loop
         if idx = path_items'left then
-          import_module_from_file(script_path, path_items(idx).all);
+          import_module_from_file(script_path, path_items(idx).all, session);
         end if;
         deallocate(path_items(idx));
       end loop;
       deallocate(path_items);
     else
-      import_module_from_file(script_path, module_name);
+      import_module_from_file(script_path, module_name, session);
     end if;
   end;
 
@@ -182,8 +193,10 @@ package body python_pkg is
     return l & LF & r;
   end;
 
-  impure function eval_integer_vector_ptr(expr : string) return integer_vector_ptr_t is
-    constant result_integer_vector : integer_vector := eval(expr);
+  impure function eval_integer_vector_ptr(
+    expr : string; session : python_session_t := default_session
+  ) return integer_vector_ptr_t is
+    constant result_integer_vector : integer_vector := eval(expr, session);
     constant len : natural := result_integer_vector'length;
     constant result_integer_vector_normalized : integer_vector(0 to len - 1) := result_integer_vector;
     constant result : integer_vector_ptr_t := new_integer_vector_ptr(len);
@@ -289,30 +302,34 @@ package body python_pkg is
   end;
 
   impure function call_integer_w_arg(
-    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
+    session : python_session_t := default_session
   ) return integer is
   begin
-    return eval(to_call_str(identifier, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10));
+    return eval(to_call_str(identifier, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10), session);
   end;
 
   procedure call(
-    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
+    session : python_session_t := default_session
   ) is
   begin
-    exec(to_call_str(identifier, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10));
+    exec(to_call_str(identifier, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10), session);
   end;
 
   impure function call_integer_vector(
-    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
+    session : python_session_t := default_session
   ) return integer_vector is
   begin
-    return eval(to_call_str(identifier, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10));
+    return eval(to_call_str(identifier, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10), session);
   end;
 
   impure function call_real(
-    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg
+    identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
+    session : python_session_t := default_session
   ) return real is
   begin
-    return eval(to_call_str(identifier, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10));
+    return eval(to_call_str(identifier, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10), session);
   end;
 end package body;
