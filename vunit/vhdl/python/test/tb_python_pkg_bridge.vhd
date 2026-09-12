@@ -700,7 +700,7 @@ begin
       ---------------------------------------------------------------------
       -- integer_array_t
       ---------------------------------------------------------------------
-      elsif run("Test that a 2D array preserves axis orientation, get(a, x, y) is a[y, x]") then
+      elsif run("Test that a 2D array preserves axis orientation, get(a, x, y) is row y column x") then
         arr := new_2d(width => 3, height => 2, bit_width => 16, is_signed => false);
         for y in 0 to 1 loop
           for x in 0 to 2 loop
@@ -713,7 +713,7 @@ begin
         );
         check_true(call_boolean("orientation_ok", arg(arr)));
 
-      elsif run("Test that a 3D array preserves axis orientation, get(a, x, y, z) is a[y, x, z]") then
+      elsif run("Test that a 3D array preserves axis orientation, get(a, x, y, z) is row y column x plane z") then
         arr := new_3d(width => 3, height => 2, depth => 4, bit_width => 16, is_signed => false);
         for y in 0 to 1 loop
           for x in 0 to 2 loop

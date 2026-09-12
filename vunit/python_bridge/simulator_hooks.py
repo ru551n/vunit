@@ -6,8 +6,12 @@
 
 
 """
-Hooks used by the NVC and GHDL interfaces to make the simulator find the bridge library.
-They have no effect unless Python support is enabled for the project.
+Hooks used by the NVC, GHDL and ModelSim/Questa interfaces to make the simulator load the
+bridge library and its dependencies. They have no effect unless Python support is enabled
+for the project.
+
+Questa needs no help finding the library itself: the FLI attributes of the generated
+python_bridge_pkg.vhd name it by absolute path.
 """
 
 import os
@@ -48,3 +52,21 @@ def ghdl_run_env(project, env: Dict[str, str]) -> Dict[str, str]:
     env = dict(env)
     env[variable] = os.pathsep.join(item for item in (str(bridge.directory), env.get(variable, "")) if item)
     return env
+
+
+def modelsim_vsim_flags(project) -> List[str]:
+    """
+    Flags for the vsim processes VUnit starts itself.
+
+    Questa/ModelSim puts the directory of the C++ runtime it bundles first in
+    LD_LIBRARY_PATH. That runtime is regularly older than the one the Python extension
+    modules of the environment (NumPy, used for integer_array_t values) were built
+    against, and they then fail to load in the embedded interpreter. -noautoldlibpath
+    turns that off, leaving the C++ runtime of the system to be found as usual.
+
+    Only relevant on Linux, where LD_LIBRARY_PATH decides this, and only when the
+    simulator accepts the flag.
+    """
+    if get_bridge(project) is None or not sys.platform.startswith("linux"):
+        return []
+    return ["-noautoldlibpath"]

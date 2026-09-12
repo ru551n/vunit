@@ -62,9 +62,9 @@ package python_ffi_pkg is
   -- Private, the primitives the bridge operations of python_pkg are built on
   -----------------------------------------------------------------------------
   -- Some operations of python_pkg are implemented by the VUnit Python
-  -- bridge, which is only available for NVC and GHDL. The primitives below
-  -- are declared so that python_pkg has one body for every simulator, but
-  -- they report a failure when they are used.
+  -- bridge, which is only available for NVC, GHDL and Questa. The primitives
+  -- below are declared so that python_pkg has one body for every simulator,
+  -- but they report a failure when they are used.
 
   -- Logger used to report Python errors
   constant python_logger : logger_t := get_logger("vunit_lib:python");
@@ -115,7 +115,7 @@ package body python_ffi_pkg is
   procedure p_check_session(session : python_session_t) is
   begin
     if session /= default_session then
-      report "Python sessions are only supported with NVC and GHDL" severity failure;
+      report "Python sessions are only supported with NVC, GHDL and Questa" severity failure;
     end if;
   end;
 
@@ -217,7 +217,7 @@ package body python_ffi_pkg is
   -----------------------------------------------------------------------------
   procedure p_unsupported(name : string) is
   begin
-    failure(python_logger, name & " requires NVC or GHDL");
+    failure(python_logger, name & " requires NVC, GHDL or Questa");
   end;
 
   function p_eval_operation(expr : string; session : python_session_t := default_session) return string is

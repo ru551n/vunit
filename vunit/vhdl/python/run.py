@@ -28,13 +28,16 @@ EXPECTED_FAILURES = [
     "lib.tb_python_pkg.Test raising exception",
 ]
 
-# The FLI and VHPI applications reject real values outside the float range, so
-# these fail by design there. The Python bridge (NVC, GHDL) has no such limit
-# since VHDL real is a double, and there they pass.
-EXPECTED_FAILURES_FLI_VHPI = [
+# The upstream VHPI application rejects real values outside the float range, so
+# these fail by design there. The Python bridge (NVC, GHDL, Questa) has no such
+# limit since VHDL real is a double, and there they pass.
+EXPECTED_FAILURES_VHPI = [
     "lib.tb_python_pkg.Test eval of real with overflow from C to VHDL",
     "lib.tb_python_pkg.Test eval of real with underflow from C to VHDL",
 ]
+
+# Simulators where python_pkg is implemented by the VUnit Python bridge
+BRIDGE_SIMULATORS = ["nvc", "ghdl", "modelsim"]
 
 
 def remote_test():
@@ -74,12 +77,12 @@ def main():
 
     simulator_name = vu.get_simulator_name()
     expected_failures = list(EXPECTED_FAILURES)
-    if simulator_name not in ["nvc", "ghdl"]:
-        expected_failures += EXPECTED_FAILURES_FLI_VHPI
+    if simulator_name not in BRIDGE_SIMULATORS:
+        expected_failures += EXPECTED_FAILURES_VHPI
 
     lib = vu.add_library("lib")
     lib.add_source_file(ROOT / "test" / "tb_python_pkg.vhd")
-    if simulator_name in ["nvc", "ghdl"]:
+    if simulator_name in BRIDGE_SIMULATORS:
         # The operations implemented by the Python bridge
         lib.add_source_file(ROOT / "test" / "tb_python_pkg_bridge.vhd")
 

@@ -140,13 +140,13 @@ package python_pkg is
   impure function "&"(l, r : arg_t) return arg_t;
 
   -----------------------------------------------------------------------------
-  -- Operations implemented by the Python bridge (NVC and GHDL only)
+  -- Operations implemented by the Python bridge (NVC, GHDL and Questa)
   -----------------------------------------------------------------------------
   -- The operations below are implemented by the VUnit Python bridge and are
-  -- therefore only available for NVC and GHDL; the other simulators report a
-  -- failure when they are used. Like the other operations, every one of them
-  -- takes the session it is performed in as its last parameter, defaulting to
-  -- the default session.
+  -- therefore only available for NVC, GHDL and Questa; the other simulators
+  -- report a failure when they are used. Like the other operations, every one
+  -- of them takes the session it is performed in as its last parameter,
+  -- defaulting to the default session.
 
   -----------------------------------------------------------------------------
   -- Additional argument values of call
@@ -759,7 +759,7 @@ package body python_pkg is
   end;
 
   -----------------------------------------------------------------------------
-  -- Operations implemented by the Python bridge (NVC and GHDL only)
+  -- Operations implemented by the Python bridge (NVC, GHDL and Questa)
   -----------------------------------------------------------------------------
   -- Python represents std_ulogic values by these characters
   constant p_std_ulogic_characters : string(1 to 9) := "UX01ZWLH-";
