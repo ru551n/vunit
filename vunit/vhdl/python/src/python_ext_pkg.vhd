@@ -16,11 +16,12 @@
 -- Like the operations of python_pkg, every operation takes the session it is
 -- performed in as its last parameter, defaulting to the default session.
 --
--- Note that the additional arg and eval overloads make some calls ambiguous:
--- arg("1010") can be a string, a std_ulogic_vector, a signed or an unsigned
--- value and needs a qualified expression such as arg(string'("1010")). The
--- same goes for an eval whose result type is not given by its context, where
--- the explicit eval_<type> name is the alternative.
+-- Note that the additional arg overloads make string literals ambiguous:
+-- arg("hello") can be a string, a std_ulogic_vector, a signed or an unsigned
+-- value and needs a qualified expression such as arg(string'("hello")).
+-- std_ulogic_vector results are only available under their explicit names
+-- (eval_std_ulogic_vector, call_std_ulogic_vector), not as eval/call
+-- overloads, which keeps check_equal(eval("17"), 17) unambiguous.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -71,7 +72,6 @@ package python_ext_pkg is
   impure function eval_std_ulogic_vector(
     expr : string; session : python_session_t := default_session
   ) return std_ulogic_vector;
-  alias eval is eval_std_ulogic_vector[string, python_session_t return std_ulogic_vector];
 
   impure function eval_integer_array(
     expr : string; session : python_session_t := default_session
@@ -130,8 +130,6 @@ package python_ext_pkg is
     identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
     session : python_session_t := default_session
   ) return std_ulogic_vector;
-  alias call is call_std_ulogic_vector[
-    string, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, arg_t, python_session_t return std_ulogic_vector];
 
   impure function call_integer_array(
     identifier : string; arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 : arg_t := null_arg;
