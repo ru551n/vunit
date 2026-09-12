@@ -1278,15 +1278,13 @@ other preprocessors. Lowest value first. The order between preprocessors with th
         """
         self._builtins.add_verilog_builtins()
 
-    def add_vhdl_builtins(self, external=None, use_external_log=None, python=False):
+    def add_vhdl_builtins(self, external=None, use_external_log=None):
         """
         Add VUnit VHDL builtin libraries.
 
         :param external: struct to provide bridges for the external VHDL API.
         :param use_external_log: path to external implementation of common_log_pkg-body to allow
             VUnit log messages to be redirected to another logging framework.
-        :param python: Add ``python_execute`` and ``python_call`` to ``vunit_context`` for calling
-            Python from VHDL. Requires VHDL-2008 or later and NVC or GHDL, see :ref:`python_bridge`.
 
         :example:
 
@@ -1302,7 +1300,7 @@ other preprocessors. Lowest value first. The order between preprocessors with th
           VHDL users need to call this method explicitly in order to preserve the functionality.
           See :vunit_issue:`777`.
         """
-        self._builtins.add_vhdl_builtins(external=external, use_external_log=use_external_log, python=python)
+        self._builtins.add_vhdl_builtins(external=external, use_external_log=use_external_log)
 
     def add_package(self, package_name: str) -> None:
         """Add VUnit package."""
@@ -1320,6 +1318,25 @@ other preprocessors. Lowest value first. The order between preprocessors with th
         Add array util
         """
         self._builtins.add("array_util")
+
+    def add_python(self):
+        """
+        Add the Python package, see :ref:`python_bridge`.
+
+        Lets VHDL testbenches execute Python code and call Python functions through
+        ``context vunit_lib.python_context``. Requires :meth:`add_vhdl_builtins` to have been
+        called, VHDL-2008 or later, and a simulator with a supported foreign language
+        interface (NVC and GHDL are built in; Questa/ModelSim and Riviera-PRO/Active-HDL use
+        the applications in :mod:`vunit.python_pkg`).
+
+        :example:
+
+        .. code-block:: python
+
+           prj.add_vhdl_builtins()
+           prj.add_python()
+        """
+        self._builtins.add("python")
 
     def add_random(self):
         """
