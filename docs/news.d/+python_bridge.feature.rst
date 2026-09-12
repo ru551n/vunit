@@ -8,5 +8,5 @@ implemented by the VUnit Python bridge are only available on NVC and GHDL:
 exchanging ``integer_array_t`` values as NumPy arrays, boolean, std_ulogic and
 width-checked vector results, executing files with ``exec_file`` and isolating
 models in named sessions. Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL
-(VHPI) are supported through the helpers in ``vunit.python_pkg``. See
-:ref:`python_bridge`.
+(VHPI) use the applications of the upstream ``python_pkg`` branch, which
+``add_python()`` builds under the output path as well. See :ref:`python_bridge`.

@@ -6,10 +6,20 @@
 //
 // Copyright (c) 2014-2023, Lars Asplund lars.anders.asplund@gmail.com
 
+#ifndef _WIN32
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE  // dladdr
+#endif
+#endif
+
 #include <stdbool.h>
 #include <stdio.h>
 
 #include "mti.h"
+
+#ifndef _WIN32
+#include <dlfcn.h>
+#endif
 #include "python_pkg.h"
 
 #define MAX_VHDL_PARAMETER_STRING_LENGTH 100000
@@ -31,7 +41,11 @@ static void py_error_handler(const char* context, const char* code_or_expr,
     if (ptype != NULL) {
       reason = get_string(pvalue);
     }
-    PyErr_Restore(ptype, pvalue, ptraceback);
+    // The reason has been extracted. The exception must not be left set:
+    // Py_FinalizeEx in python_cleanup would fail on it.
+    Py_XDECREF(ptype);
+    Py_XDECREF(pvalue);
+    Py_XDECREF(ptraceback);
   }
 
   // Clean-up Python session first in case vhpi_assert stops the simulation
@@ -59,7 +73,24 @@ static void ffi_error_handler(const char* context, bool cleanup) {
   mti_FatalError();
 }
 
+#ifndef _WIN32
+// The simulator loads this application with RTLD_LOCAL, which hides the
+// Python symbols from extension modules such as _ctypes and NumPy that expect
+// them to be global. Re-open the Python library, already loaded as a
+// dependency of this application, with RTLD_GLOBAL.
+static void make_python_library_global(void) {
+  Dl_info info;
+
+  if (dladdr((void*)&Py_Initialize, &info) != 0 && info.dli_fname != NULL) {
+    dlopen(info.dli_fname, RTLD_NOW | RTLD_GLOBAL | RTLD_NOLOAD);
+  }
+}
+#endif
+
 void python_setup(void) {
+#ifndef _WIN32
+  make_python_library_global();
+#endif
   Py_Initialize();
   if (!Py_IsInitialized()) {
     ffi_error_handler("Failed to initialize Python", false);

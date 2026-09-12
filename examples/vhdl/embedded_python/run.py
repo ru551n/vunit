@@ -18,7 +18,6 @@ demonstrate error reporting and are excluded by default; see
 
 from pathlib import Path
 from vunit import VUnit
-from vunit.python_pkg import compile_vhpi_application, compile_fli_application
 
 
 def hello_world():
@@ -77,16 +76,8 @@ def main():
     vu.add_vhdl_builtins()
     vu.add_python()
     vu.add_random()
-    simulator_name = vu.get_simulator_name()
-
-    if simulator_name in ["rivierapro", "activehdl"]:
-        # TODO: Include VHPI application compilation in VUnit
-        # NOTE: A clean build will delete the output after it was created so another no clean build has to be performed.
-        compile_vhpi_application(root, vu)
-    elif simulator_name == "modelsim":
-        compile_fli_application(root, vu)
-    # NVC and GHDL are handled automatically by add_python() through the VUnit
-    # Python bridge; no separate compile step or simulator flag is needed.
+    # add_python() builds the foreign language application of the simulator
+    # (the Python bridge, or the FLI/VHPI application) under the output path.
 
     lib = vu.add_library("lib")
     lib.add_source_files(root / "*.vhd")

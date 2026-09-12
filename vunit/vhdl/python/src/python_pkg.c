@@ -8,6 +8,8 @@
 
 #include "python_pkg.h"
 
+#include <string.h>
+
 static py_error_handler_callback py_error_handler = NULL;
 static ffi_error_handler_callback ffi_error_handler = NULL;
 
@@ -31,7 +33,9 @@ char* get_string(PyObject* pyobj) {
     return NULL;
   }
 
-  char* result = PyBytes_AS_STRING(str_utf_8);
+  // A copy, since the bytes object is released here. The string is only used
+  // on the error path, so the copy is never freed.
+  char* result = strdup(PyBytes_AS_STRING(str_utf_8));
   Py_DECREF(str_utf_8);
 
   return result;

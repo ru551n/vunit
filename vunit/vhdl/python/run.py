@@ -13,7 +13,6 @@ everything but remote_test is guarded by a __main__ check.
 
 from pathlib import Path
 from vunit import VUnit, VUnitCLI
-from vunit.python_pkg import compile_vhpi_application, compile_fli_application
 
 ROOT = Path(__file__).parent
 
@@ -29,6 +28,14 @@ EXPECTED_FAILURES = [
     "lib.tb_python_pkg.Test raising exception",
 ]
 
+# The FLI and VHPI applications reject real values outside the float range, so
+# these fail by design there. The Python bridge (NVC, GHDL) has no such limit
+# since VHDL real is a double, and there they pass.
+EXPECTED_FAILURES_FLI_VHPI = [
+    "lib.tb_python_pkg.Test eval of real with overflow from C to VHDL",
+    "lib.tb_python_pkg.Test eval of real with underflow from C to VHDL",
+]
+
 
 def remote_test():
     """
@@ -38,15 +45,12 @@ def remote_test():
     return 2
 
 
-def verify(results):
+def verify(results, expected_failures):
     """
     Accept the failures of the tests demonstrating Python errors, and nothing else.
-
-    The real overflow tests are not among them: VHDL real is a double on the
-    simulators using the Python bridge, so those values are representable.
     """
     tests = results.get_report().tests
-    expected = [name for name in EXPECTED_FAILURES if name in tests]
+    expected = [name for name in expected_failures if name in tests]
     failed = sorted(name for name, test in tests.items() if test.status == "failed")
 
     unexpected = [name for name in failed if name not in expected]
@@ -69,20 +73,20 @@ def main():
     vu.add_python()
 
     simulator_name = vu.get_simulator_name()
-    if simulator_name in ["rivierapro", "activehdl"]:
-        # TODO: Include VHPI application compilation in VUnit
-        # NOTE: A clean build will delete the output after it was created so another no clean build has to be performed.
-        compile_vhpi_application(ROOT, vu)
-    elif simulator_name == "modelsim":
-        compile_fli_application(ROOT, vu)
+    expected_failures = list(EXPECTED_FAILURES)
+    if simulator_name not in ["nvc", "ghdl"]:
+        expected_failures += EXPECTED_FAILURES_FLI_VHPI
 
     lib = vu.add_library("lib")
-    lib.add_source_files(ROOT / "test" / "*.vhd")
+    lib.add_source_file(ROOT / "test" / "tb_python_pkg.vhd")
+    if simulator_name in ["nvc", "ghdl"]:
+        # The operations implemented by the Python bridge
+        lib.add_source_file(ROOT / "test" / "tb_python_pkg_bridge.vhd")
 
     vu.set_compile_option("rivierapro.vcom_flags", ["-dbg"])
     vu.set_sim_option("rivierapro.vsim_flags", ["-interceptcoutput"])
 
-    vu.main(post_run=verify)
+    vu.main(post_run=lambda results: verify(results, expected_failures))
 
 
 if __name__ == "__main__":

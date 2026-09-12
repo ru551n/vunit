@@ -44,10 +44,11 @@ become available through ``python_context``:
 Requirements
 ------------
 
-* NVC or GHDL, built in through the VUnit Python bridge described below, or
+* NVC or GHDL, through the VUnit Python bridge described below, or
   Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL (VHPI) through the
-  applications compiled from a run script with helpers in ``vunit.python_pkg``,
-  see :ref:`python_bridge:other_simulators`. Any other simulator, or calling
+  applications of the upstream ``python_pkg`` branch, which
+  :meth:`add_python() <vunit.ui.VUnit.add_python>` builds in the same way, see
+  :ref:`python_bridge:other_simulators`. Any other simulator, or calling
   :meth:`add_python() <vunit.ui.VUnit.add_python>` before
   :meth:`add_vhdl_builtins() <vunit.ui.VUnit.add_vhdl_builtins>`, raises a
   ``RuntimeError``.
@@ -56,15 +57,16 @@ Requirements
   are rejected with an error.
 * NumPy, but only if ``integer_array_t`` values are exchanged
   (:ref:`python_bridge:integer_array`, NVC/GHDL only).
-* Linux (NVC/GHDL): a C compiler (``cc``, ``gcc`` or ``clang``, or ``CC``) and
+* Linux: a C compiler (``cc``, ``gcc`` or ``clang``, or ``CC``) and
   the Python development headers (for example the ``python3-dev`` package)
-  since the bridge library is compiled on first use, see
-  :ref:`python_bridge:native`. Python must provide a shared ``libpython``
+  since the bridge library, or the FLI application, is compiled on first use,
+  see :ref:`python_bridge:native`. Python must provide a shared ``libpython``
   (``--enable-shared``), which is the case for distribution Pythons,
   ``actions/setup-python``, ``uv`` and ``pyenv`` builds with default settings.
-* Windows (NVC/GHDL): a 64-bit CPython from python.org (or compatible, such as
-  ``actions/setup-python`` and ``uv``). No compiler is needed. MSYS2/MinGW
-  Pythons are not supported.
+* Windows: a 64-bit CPython from python.org (or compatible, such as
+  ``actions/setup-python`` and ``uv``). No compiler is needed for NVC and GHDL;
+  Questa uses the MinGW compiler it ships with. MSYS2/MinGW Pythons are not
+  supported.
 
 The simulator runs Python in the same environment as VUnit itself, including
 an active virtual environment and its installed packages.
@@ -523,23 +525,30 @@ Other simulators
 -----------------
 
 Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL (VHPI) implement
-``python_ffi_pkg`` with a foreign language application built from C sources in
-:vunit_file:`vunit/vhdl/python/src <vunit/vhdl/python/src>`. Unlike NVC and
-GHDL, VUnit does not build this application automatically; it must be
-compiled once from the run script with one of the helpers below, before
-:meth:`add_python() <vunit.ui.VUnit.add_python>`:
+``python_ffi_pkg`` with the foreign language applications of the upstream
+``python_pkg`` branch, built from the C sources in
+:vunit_file:`vunit/vhdl/python/src <vunit/vhdl/python/src>`.
+:meth:`add_python() <vunit.ui.VUnit.add_python>` builds the application under
+the output path (``<output path>/<simulator>/libraries/python``) the first
+time it is called and rebuilds it when the sources, the Python running VUnit
+or the simulator installation change, so a run script needs nothing beyond
+:meth:`add_python() <vunit.ui.VUnit.add_python>`. The run script helpers
+``compile_fli_application`` and ``compile_vhpi_application`` of the upstream
+branch remain available and do the same.
 
-.. code-block:: python
+On Questa the application is compiled with the system C compiler on Linux and
+with the MinGW compiler bundled with Questa on Windows, against the Python
+running VUnit. Riviera-PRO/Active-HDL use their ``ccomp`` driver.
 
-    from vunit.python_pkg import compile_fli_application
-
-    simulator_name = vu.get_simulator_name()
-    if simulator_name == "modelsim":
-        compile_fli_application(root, vu)
+These applications differ from the Python bridge in a few ways: only the
+default session exists, the operations implemented by the bridge
+(``integer_array_t`` values, the additional result types, ``exec_file``) report
+that they require NVC or GHDL, a Python error stops the simulation with the
+message printed by the application rather than through ``python_logger``, and
+``real`` values outside the single precision float range are rejected.
 
 See :vunit_example:`➚ examples/vhdl/embedded_python <vhdl/embedded_python>` for
-a complete example covering all three simulator families. This path is not
-covered by CI and is not regularly tested.
+a complete example covering all three simulator families.
 
 .. automodule:: vunit.python_pkg
 
@@ -594,4 +603,5 @@ GHDL gcc                   6.0.0, 7.0.0-dev
 On Windows, CI tests NVC 1.22 and GHDL mcode (nightly) with Python 3.10, 3.12
 and 3.14.
 
-Questa/ModelSim (FLI) and Riviera-PRO/Active-HDL (VHPI) are not tested by CI.
+Questa Altera Starter FPGA Edition 2025.3 (FLI) is tested manually on Linux;
+Riviera-PRO/Active-HDL (VHPI) is not tested. Neither is covered by CI.
