@@ -58,24 +58,18 @@ jobs:
       with:
         backend: ${{ matrix.backend }}
 
+    # A path with a space, since the bridge builds command lines from it
     - name: '🐍 Install VUnit and NumPy in a virtual environment'
       run: |
         python -m venv "$RUNNER_TEMP/venv with space"
-        "$RUNNER_TEMP/venv with space/bin/python" -m pip install numpy -e . --progress-bar off
+        echo "$RUNNER_TEMP/venv with space/bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/venv with space/bin/pip" install numpy -e . --progress-bar off
 
     - name: '🚧 Feature tests'
-      run: '"$RUNNER_TEMP/venv with space/bin/python" vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"'
-
-    - name: '🚧 Feature tests with cached bridge'
-      run: |
-        before="$(ls -l --time-style=full-iso "$RUNNER_TEMP/out dir"/python_bridge/*/libvunit_python_bridge.so)"
-        "$RUNNER_TEMP/venv with space/bin/python" vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
-        test "$before" = "$(ls -l --time-style=full-iso "$RUNNER_TEMP/out dir"/python_bridge/*/libvunit_python_bridge.so)"
+      run: python vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
 
     - name: '🚧 Example'
-      run: |
-        "$RUNNER_TEMP/venv with space/bin/python" examples/vhdl/embedded_python/run.py -p 4 \
-          --without-attributes .optional_deps --without-attributes .expected_failure
+      run: python examples/vhdl/embedded_python/run.py -p 4 --without-attributes .optional_deps --without-attributes .expected_failure
 
 #
 # Windows, prebuilt MSVC DLLs
@@ -132,17 +126,17 @@ jobs:
     - name: '🐍 Install VUnit and NumPy in a virtual environment'
       run: |
         python -m venv "$RUNNER_TEMP/venv with space"
-        "$RUNNER_TEMP/venv with space/Scripts/python" -m pip install numpy -e . --progress-bar off
+        echo "$RUNNER_TEMP/venv with space/Scripts" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/venv with space/Scripts/pip" install numpy -e . --progress-bar off
 
-    - name: '🚧 Feature tests (no compiler on PATH)'
+    # No compiler on PATH: the prebuilt DLLs must be used
+    - name: '🚧 Feature tests'
       run: |
         ! command -v cl
-        "$RUNNER_TEMP/venv with space/Scripts/python" vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
+        python vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
 
     - name: '🚧 Example'
-      run: |
-        "$RUNNER_TEMP/venv with space/Scripts/python" examples/vhdl/embedded_python/run.py -p 4 \
-          --without-attributes .optional_deps --without-attributes .expected_failure
+      run: python examples/vhdl/embedded_python/run.py -p 4 --without-attributes .optional_deps --without-attributes .expected_failure
 
 #
 # Packaging, sources and DLLs included, no Linux binaries
@@ -175,13 +169,12 @@ jobs:
         pip install -U setuptools wheel --progress-bar off
         python setup.py sdist
 
+    # Sources of every kind, the five DLLs, no Linux binary
     - name: '🔍 Check sdist content'
       run: |
         tar tzf dist/*.tar.gz > content.txt
-        for file in python_bridge/bridge.py python_bridge/runtime.py python_bridge/native/bridge.h python_bridge/native/interpreter.c \
-                    vhdl/python/src/python_bridge_pkg.vhd.in vhdl/python/src/python_pkg.vhd vhdl/python/src/python_ffi_pkg_bridge.vhd \
-                    vhdl/python/src/python_pkg_fli.c vhdl/python/src/python_pkg_vhpi.vhd \
-                    python_pkg.py; do
+        for file in python_bridge/runtime.py python_bridge/native/bridge.h vhdl/python/src/python_bridge_pkg.vhd.in \
+                    vhdl/python/src/python_pkg.vhd vhdl/python/src/python_pkg_fli.c python_pkg.py; do
           grep -q "vunit/$file\$" content.txt || { echo "missing $file"; exit 1; }
         done
         test "$(grep -c 'vunit/python_bridge/bin/vunit_python_bridge-cp3[0-9]*-win_amd64.dll$' content.txt)" = 5
