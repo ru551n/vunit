@@ -39,9 +39,11 @@ jobs:
           - { os: ubuntu-24.04, py: '3.15', sim: nvc, nvc: '1.22.1', canary: true }
           - { os: ubuntu-24.04, py: '3.10', sim: ghdl, backend: mcode, ghdl: latest }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: mcode, ghdl: nightly }
+          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm-jit, ghdl: latest }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm-jit, ghdl: nightly }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm, ghdl: latest }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm, ghdl: nightly }
+          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: gcc, ghdl: latest }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: gcc, ghdl: nightly }
           - { os: macos-latest, py: '3.14', sim: nvc, nvc: brew }
           - { os: macos-latest, py: '3.14', sim: ghdl, backend: mcode, ghdl: nightly }
