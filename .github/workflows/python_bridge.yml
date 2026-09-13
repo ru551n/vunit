@@ -46,8 +46,8 @@ jobs:
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: gcc, ghdl: latest }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: gcc, ghdl: nightly, canary: true }
           - { os: macos-15, py: '3.14', sim: nvc, nvc: brew }
-          # macos-15: setup-ghdl has no build for newer macOS versions yet
-          - { os: macos-15, py: '3.14', sim: ghdl, backend: mcode, ghdl: latest }
+          # macos-15: setup-ghdl has no build for newer macOS versions yet, and only the llvm backend
+          - { os: macos-15, py: '3.14', sim: ghdl, backend: llvm, ghdl: latest }
     name: '${{ matrix.os }} · Python ${{ matrix.py }} · ${{ matrix.sim }} ${{ matrix.backend }}${{ matrix.ghdl }}${{ matrix.nvc }}'
     continue-on-error: ${{ matrix.canary || false }}
     env:
