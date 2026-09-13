@@ -65,7 +65,10 @@ jobs:
         version: ${{ matrix.ghdl }}
         backend: ${{ matrix.backend }}
 
-    # A path with a space, since the bridge builds command lines from it
+    # The environment and the output go to the runner's temporary directory,
+    # outside the checkout, so nothing built can end up in the tree. The space
+    # in the path is deliberate: the bridge builds command lines and simulator
+    # options from these paths.
     - name: '🐍 Install VUnit and NumPy in a virtual environment'
       run: |
         python -m venv "$RUNNER_TEMP/venv with space"
@@ -130,6 +133,7 @@ jobs:
       with:
         backend: mcode
 
+    # Same as on Linux: outside the checkout, with a space in the path
     - name: '🐍 Install VUnit and NumPy in a virtual environment'
       run: |
         python -m venv "$RUNNER_TEMP/venv with space"
