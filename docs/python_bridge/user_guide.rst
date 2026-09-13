@@ -315,8 +315,8 @@ On NVC, GHDL and Questa, ``call`` returns the same additional types as
 ``call_integer_array``, ``call_string``, ``call_real_vector`` and
 ``call_integer_vector_ptr``, plus the procedures ``call_std_ulogic_vector``,
 ``call_signed`` and ``call_unsigned`` taking the result as an ``out``
-parameter. All of the functions but ``call_std_ulogic_vector`` and
-``call_integer_array`` are aliased ``call``.
+parameter. All of the functions but ``call_std_ulogic_vector`` are aliased
+``call``.
 
 ``to_call_str`` builds the Python call expression itself, as a string, which
 is useful to embed a call inside a larger ``exec``/``eval`` string:
