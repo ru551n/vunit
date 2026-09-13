@@ -594,9 +594,12 @@ class TestPosixBuildAndCache(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "mti.h"):
             native_library.prepare_library(self.tempdir / "out", prefix)
 
-    def test_no_prebuilt_shared_library_in_repository(self):
-        matches = glob(str(native_library.PACKAGE_PATH / "**" / "*.so"), recursive=True)
-        matches += glob(str(VHDL_PATH / "**" / "*.so"), recursive=True)
+    def test_no_prebuilt_library_in_repository(self):
+        # Linux libraries are built on first use and Windows DLLs are added to releases by CI
+        matches = []
+        for pattern in ["*.so", "*.dll"]:
+            matches += glob(str(native_library.PACKAGE_PATH / "**" / pattern), recursive=True)
+            matches += glob(str(VHDL_PATH / "**" / pattern), recursive=True)
         self.assertEqual(matches, [])
 
 
