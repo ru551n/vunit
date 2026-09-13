@@ -27,25 +27,25 @@ jobs:
       matrix:
         # The oldest and newest supported CPython; every GHDL backend, since
         # the bridge library is loaded differently by the ones that link ahead
-        # of time (llvm, gcc), on the latest release and the nightly build; the
-        # NVC release VUnit is developed against.
+        # of time (llvm, gcc), on the latest release; the NVC release VUnit is
+        # developed against.
         #
-        # Canary (allowed to fail): the newest NVC release, where changes to
-        # VHPIDIRECT show up first.
+        # Canaries (allowed to fail): the GHDL nightly builds and the newest
+        # NVC release with Python 3.14, where simulator changes show up first.
         include:
           - { os: ubuntu-24.04, py: '3.10', sim: nvc, nvc: '1.22.1' }
           - { os: ubuntu-24.04, py: '3.14', sim: nvc, nvc: '1.22.1' }
           - { os: ubuntu-24.04, py: '3.14', sim: nvc, nvc: latest, canary: true }
           - { os: ubuntu-24.04, py: '3.10', sim: ghdl, backend: mcode, ghdl: latest }
-          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: mcode, ghdl: nightly }
+          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: mcode, ghdl: nightly, canary: true }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm-jit, ghdl: latest }
-          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm-jit, ghdl: nightly }
+          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm-jit, ghdl: nightly, canary: true }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm, ghdl: latest }
-          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm, ghdl: nightly }
+          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm, ghdl: nightly, canary: true }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: gcc, ghdl: latest }
-          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: gcc, ghdl: nightly }
+          - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: gcc, ghdl: nightly, canary: true }
           - { os: macos-latest, py: '3.14', sim: nvc, nvc: brew }
-          - { os: macos-latest, py: '3.14', sim: ghdl, backend: mcode, ghdl: nightly }
+          - { os: macos-latest, py: '3.14', sim: ghdl, backend: mcode, ghdl: latest }
     name: '${{ matrix.os }} · Python ${{ matrix.py }} · ${{ matrix.sim }} ${{ matrix.backend }}${{ matrix.ghdl }}${{ matrix.nvc }}'
     continue-on-error: ${{ matrix.canary || false }}
     env:
