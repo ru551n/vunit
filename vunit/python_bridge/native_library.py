@@ -135,21 +135,32 @@ def _prepare_windows_library(root: Path) -> Path:
 def _python_library() -> Path:
     """
     The shared libpython of the running interpreter.
+
+    Regular --enable-shared builds name it in LDLIBRARY (libpython3.X.so, .dylib); macOS
+    framework builds name the framework binary instead (Python.framework/Versions/3.X/Python).
     """
     ldlibrary = sysconfig.get_config_var("LDLIBRARY") or ""
-    if (
-        not sysconfig.get_config_var("Py_ENABLE_SHARED")
-        or not ldlibrary.endswith((".so", ".dylib"))
-        and ".so." not in ldlibrary
-    ):
+    framework = sysconfig.get_config_var("PYTHONFRAMEWORK") or ""
+    version = f"{sys.version_info[0]}.{sys.version_info[1]}{getattr(sys, 'abiflags', '')}"
+    shared = bool(sysconfig.get_config_var("Py_ENABLE_SHARED")) or bool(framework)
+    if not shared or not (framework or ldlibrary.endswith((".so", ".dylib")) or ".so." in ldlibrary):
         raise PythonBridgeError(
             f"VHDL Python support requires a CPython built with a shared Python library (--enable-shared). "
-            f"{sys.executable} links Python statically."
+            f"{sys.executable} links Python statically "
+            f"(LDLIBRARY={ldlibrary!r}, Py_ENABLE_SHARED={sysconfig.get_config_var('Py_ENABLE_SHARED')!r})."
         )
+    prefix = Path(sys.base_prefix)
     candidates = [Path(sysconfig.get_config_var("LIBDIR") or "") / ldlibrary]
     # Relocated installations (e.g. uv/python-build-standalone) may report a
     # build-time LIBDIR, fall back to the installation prefix.
-    candidates.append(Path(sys.base_prefix) / "lib" / ldlibrary)
+    candidates.append(prefix / "lib" / ldlibrary)
+    if sys.platform == "darwin":
+        candidates.append(prefix / "lib" / f"libpython{version}.dylib")
+        if framework:
+            # The framework binary: the prefix of a framework build is Versions/3.X
+            candidates.append(prefix / framework)
+            framework_prefix = sysconfig.get_config_var("PYTHONFRAMEWORKPREFIX") or ""
+            candidates.append(Path(framework_prefix) / f"{framework}.framework" / "Versions" / version / framework)
     for candidate in candidates:
         if candidate.is_file():
             return candidate.resolve()
@@ -280,7 +291,8 @@ def _prepare_posix_library(root: Path, simulator_prefix: Optional[Path] = None) 
         + [f"-I{path}" for path in include_dirs]
         + [str(path) for path in bridge_sources(fli=fli)]
         + ["-o", str(tmp)]
-        + [str(python_library), f"-Wl,-rpath,{python_library.parent!s}", f"-Wl,-soname,{name}"]
+        + [str(python_library), f"-Wl,-rpath,{python_library.parent!s}"]
+        + ([f"-Wl,-install_name,@rpath/{name}"] if sys.platform == "darwin" else [f"-Wl,-soname,{name}"])
         + (["-ldl"] if sys.platform.startswith("linux") else [])
     )
     try:
