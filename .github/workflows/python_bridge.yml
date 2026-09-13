@@ -30,12 +30,13 @@ jobs:
         # of time (llvm, gcc), on the latest release; the NVC release VUnit is
         # developed against.
         #
-        # Canaries (allowed to fail): the GHDL nightly builds and the newest
-        # NVC release with Python 3.14, where simulator changes show up first.
+        # Canaries (allowed to fail): the GHDL nightly builds and NVC built
+        # from its master branch, with Python 3.14, where simulator changes
+        # show up first.
         include:
           - { os: ubuntu-24.04, py: '3.10', sim: nvc, nvc: '1.22.1' }
           - { os: ubuntu-24.04, py: '3.14', sim: nvc, nvc: '1.22.1' }
-          - { os: ubuntu-24.04, py: '3.14', sim: nvc, nvc: latest, canary: true }
+          - { os: ubuntu-24.04, py: '3.14', sim: nvc, nvc: master, canary: true }
           - { os: ubuntu-24.04, py: '3.10', sim: ghdl, backend: mcode, ghdl: latest }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: mcode, ghdl: nightly, canary: true }
           - { os: ubuntu-24.04, py: '3.14', sim: ghdl, backend: llvm-jit, ghdl: latest }
@@ -63,14 +64,19 @@ jobs:
         python-version: ${{ matrix.py }}
 
     - name: '⚙️ Setup NVC'
-      if: matrix.sim == 'nvc' && matrix.nvc != 'brew'
-      env:
-        GH_TOKEN: ${{ github.token }}
+      if: matrix.sim == 'nvc' && matrix.nvc != 'brew' && matrix.nvc != 'master'
       run: |
-        tag="r${{ matrix.nvc }}"
-        if [ "${{ matrix.nvc }}" = latest ]; then tag="$(gh release view --repo nickg/nvc --json tagName -q .tagName)"; fi
-        gh release download "$tag" --repo nickg/nvc --pattern '*amd64_ubuntu-24.04.deb' --output nvc.deb
+        curl -fsSL -o nvc.deb "https://github.com/nickg/nvc/releases/download/r${{ matrix.nvc }}/nvc_${{ matrix.nvc }}-1_amd64_ubuntu-24.04.deb"
         sudo apt-get install -y ./nvc.deb
+
+    # As in NVC's README
+    - name: '⚙️ Build NVC from its master branch'
+      if: matrix.nvc == 'master'
+      run: |
+        sudo apt-get install -y -qq build-essential automake autoconf flex check llvm-dev pkg-config zlib1g-dev libdw-dev libffi-dev libzstd-dev
+        git clone --depth 1 https://github.com/nickg/nvc.git "$RUNNER_TEMP/nvc"
+        cd "$RUNNER_TEMP/nvc" && ./autogen.sh && mkdir build && cd build && ../configure && make -j"$(nproc)" && sudo make install
+        nvc --version
 
     - name: '⚙️ Setup NVC with Homebrew'
       if: matrix.nvc == 'brew'
