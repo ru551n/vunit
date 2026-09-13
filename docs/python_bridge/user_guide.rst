@@ -55,8 +55,6 @@ Requirements
 * VHDL-2008 or later.
 * CPython 3.10 or later with the standard (GIL) build. Free-threaded builds
   are rejected with an error.
-* NumPy, but only if ``integer_array_t`` values are exchanged
-  (:ref:`python_bridge:integer_array`, not on Riviera-PRO/Active-HDL).
 * Linux: a C compiler (``cc``, ``gcc`` or ``clang``, or ``CC``) and
   the Python development headers (for example the ``python3-dev`` package)
   since the bridge library is compiled on first use, see

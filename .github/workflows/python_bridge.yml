@@ -1,7 +1,7 @@
 name: 'python bridge'
 
 # Tests of the VHDL Python integration, add_python(), in the environments
-# push.yml does not provide: CPython from python.org with NumPy, on Linux
+# push.yml does not provide: CPython from python.org, on Linux
 # (bridge compiled on first use) and Windows (prebuilt MSVC DLLs), and the
 # content of the package.
 
@@ -87,11 +87,11 @@ jobs:
     # outside the checkout, so nothing built can end up in the tree. The space
     # in the path is deliberate: the bridge builds command lines and simulator
     # options from these paths.
-    - name: '🐍 Install VUnit and NumPy in a virtual environment'
+    - name: '🐍 Install VUnit in a virtual environment'
       run: |
         python -m venv "$RUNNER_TEMP/venv with space"
         echo "$RUNNER_TEMP/venv with space/bin" >> "$GITHUB_PATH"
-        "$RUNNER_TEMP/venv with space/bin/pip" install numpy -e . --progress-bar off
+        "$RUNNER_TEMP/venv with space/bin/pip" install -e . --progress-bar off
 
     - name: '🚧 Feature tests'
       run: python vunit/vhdl/python/run.py -p 4 -o "$RUNNER_TEMP/out dir"
@@ -152,11 +152,11 @@ jobs:
         backend: mcode
 
     # Same as on Linux: outside the checkout, with a space in the path
-    - name: '🐍 Install VUnit and NumPy in a virtual environment'
+    - name: '🐍 Install VUnit in a virtual environment'
       run: |
         python -m venv "$RUNNER_TEMP/venv with space"
         echo "$RUNNER_TEMP/venv with space/Scripts" >> "$GITHUB_PATH"
-        "$RUNNER_TEMP/venv with space/Scripts/pip" install numpy -e . --progress-bar off
+        "$RUNNER_TEMP/venv with space/Scripts/pip" install -e . --progress-bar off
 
     # No compiler on PATH: the prebuilt DLLs must be used
     - name: '🚧 Feature tests'
