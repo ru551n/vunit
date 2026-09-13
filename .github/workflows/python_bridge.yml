@@ -25,13 +25,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Every GHDL backend, since the bridge library is loaded differently by
+        # the ones that link ahead of time (llvm, gcc), on a released version
+        # and the nightly build
         include:
           - { py: '3.10', sim: nvc }
           - { py: '3.14', sim: nvc }
-          - { py: '3.10', sim: ghdl, backend: mcode }
-          - { py: '3.14', sim: ghdl, backend: mcode }
-          - { py: '3.14', sim: ghdl, backend: llvm }
-    name: '🐧 Ubuntu · Python ${{ matrix.py }} · ${{ matrix.sim }} ${{ matrix.backend }}'
+          - { py: '3.10', sim: ghdl, backend: mcode, ghdl: '6.0.0' }
+          - { py: '3.14', sim: ghdl, backend: mcode, ghdl: nightly }
+          - { py: '3.14', sim: ghdl, backend: llvm-jit, ghdl: nightly }
+          - { py: '3.14', sim: ghdl, backend: llvm, ghdl: '6.0.0' }
+          - { py: '3.14', sim: ghdl, backend: llvm, ghdl: nightly }
+          - { py: '3.14', sim: ghdl, backend: gcc, ghdl: nightly }
+    name: '🐧 Ubuntu · Python ${{ matrix.py }} · ${{ matrix.sim }} ${{ matrix.backend }} ${{ matrix.ghdl }}'
     env:
       VUNIT_SIMULATOR: ${{ matrix.sim }}
     steps:
@@ -56,6 +62,7 @@ jobs:
       if: matrix.sim == 'ghdl'
       uses: ghdl/setup-ghdl@main
       with:
+        version: ${{ matrix.ghdl }}
         backend: ${{ matrix.backend }}
 
     # A path with a space, since the bridge builds command lines from it
