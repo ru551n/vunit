@@ -48,7 +48,7 @@ def ghdl_run_env(project, env: Dict[str, str]) -> Dict[str, str]:
     bridge = get_bridge(project)
     if bridge is None:
         return env
-    variable = "PATH" if sys.platform == "win32" else "LD_LIBRARY_PATH"
+    variable = {"win32": "PATH", "darwin": "DYLD_LIBRARY_PATH"}.get(sys.platform, "LD_LIBRARY_PATH")
     env = dict(env)
     env[variable] = os.pathsep.join(item for item in (str(bridge.directory), env.get(variable, "")) if item)
     return env
