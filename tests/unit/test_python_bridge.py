@@ -802,6 +802,13 @@ class TestSimulatorHooks(unittest.TestCase):
         self.assertEqual(env, {"LD_LIBRARY_PATH": "/existing/path"})
         self.assertIsNot(result, env)
 
+    def test_ghdl_run_env_uses_dyld_library_path_on_macos(self):
+        bridge_dir = Path("/some/dir")
+        self._register(bridge_dir / "libvunit_python_bridge.so")
+        with mock.patch("vunit.python_bridge.simulator_hooks.sys.platform", "darwin"):
+            result = simulator_hooks.ghdl_run_env(self.project, {})
+        self.assertEqual(result["DYLD_LIBRARY_PATH"], str(bridge_dir))
+
     def test_ghdl_run_env_uses_path_variable_on_windows(self):
         bridge_dir = Path("/some/dir")
         self._register(bridge_dir / "libvunit_python_bridge.so")
