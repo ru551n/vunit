@@ -10,14 +10,39 @@ Embedded Python
 
 Demonstrates calling Python from VHDL with ``add_python()``: executing Python
 code and calling Python functions, for example NumPy/Matplotlib reference
-models, from a testbench. Some tests need optional Python packages
-(``PySimpleGUI``, ``python-constraint``, ``crccheck`` and ``matplotlib``) or
-demonstrate error reporting and are excluded by default; see
-:ref:`python_bridge`.
+models, from a testbench. Some tests need Python packages VUnit does not
+depend on (``PySimpleGUI``, ``python-constraint``, ``crccheck`` and
+``matplotlib``); the run script says which when they are missing. Three
+tests demonstrate error reporting and fail by design. See :ref:`python_bridge`.
 """
 
+import importlib.util
 from pathlib import Path
 from vunit import VUnit
+
+# Test, the module it imports and the package that provides it
+OPTIONAL_PACKAGES = [
+    ("Test GUI browsing for input stimuli file", "PySimpleGUI", "PySimpleGUI"),
+    ("Test querying for randomization seed", "PySimpleGUI", "PySimpleGUI"),
+    ("Test controlling progress of simulation", "PySimpleGUI", "PySimpleGUI"),
+    ("Test constraint solving", "constraint", "python-constraint"),
+    ("Test using a Python module as the golden reference", "crccheck", "crccheck"),
+    ("Test using Python in an behavioral model", "crccheck", "crccheck"),
+    ("Test simple plot", "matplotlib", "matplotlib"),
+    ("Test advanced plot", "matplotlib", "matplotlib"),
+]
+
+
+def missing_package(test_name, package):
+    """
+    A pre_config hook failing the test with the package it needs.
+    """
+
+    def pre_config(output_path):  # pylint: disable=unused-argument
+        print(f"{test_name} needs the Python package {package}: pip install {package}")
+        return False
+
+    return pre_config
 
 
 def hello_world():
@@ -90,21 +115,25 @@ def main():
 
     tb = lib.test_bench("tb_example")
 
-    # These tests need optional Python packages that are not part of VUnit's
-    # own test requirements; they are skipped unless explicitly selected.
-    for test_name in (
-        "Test GUI browsing for input stimuli file",  # PySimpleGUI
-        "Test querying for randomization seed",  # PySimpleGUI
-        "Test controlling progress of simulation",  # PySimpleGUI
-        "Test constraint solving",  # python-constraint
-        "Test using a Python module as the golden reference",  # crccheck
-        "Test using Python in an behavioral model",  # crccheck
-        "Test simple plot",  # matplotlib
-        "Test advanced plot",  # matplotlib
-    ):
-        tb.test(test_name).set_attribute(".optional_deps", None)
+    # These tests need Python packages that VUnit does not depend on. A test
+    # whose package is missing fails at once with a message saying what to
+    # install; --without-attributes .optional_deps leaves them all out.
+    missing = {}
+    for test_name, module, package in OPTIONAL_PACKAGES:
+        test = tb.test(test_name)
+        test.set_attribute(".optional_deps", None)
+        if importlib.util.find_spec(module) is None:
+            missing.setdefault(package, []).append(test_name)
+            test.set_pre_config(missing_package(test_name, package))
+    if missing:
+        print("Some tests need Python packages that are not installed:")
+        for package, test_names in missing.items():
+            print(f"  {package}: {', '.join(test_names)}")
+        print(f"Install them with: pip install {' '.join(missing)}")
+        print("or leave those tests out with: --without-attributes .optional_deps\n")
 
-    # These tests demonstrate error reporting and are expected to fail.
+    # These tests demonstrate error reporting and fail by design;
+    # --without-attributes .expected_failure leaves them out.
     for test_name in (
         "Test syntax error",
         "Test type error",
