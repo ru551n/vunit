@@ -12,6 +12,7 @@ use vunit_lib.random_pkg.all;
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.math_real.all;
+use ieee.numeric_std.all;
 use ieee.numeric_std_unsigned.all;
 
 entity tb_example is
@@ -29,6 +30,10 @@ architecture tb of tb_example is
   signal out_tvalid, out_tlast : std_logic := '0';
   signal out_tdata : std_logic_vector(7 downto 0);
   signal crc_error : std_logic;
+
+  -- Ports of the python_model component
+  signal model_x : integer := 0;
+  signal model_y : integer;
 begin
   test_runner : process
     constant pi : real := 3.141592653589793;
@@ -44,6 +49,20 @@ begin
     variable seed : integer;
     variable test_lengths : integer_vector_ptr_t;
     variable vhdl_real : real;
+
+    -- A session is a Python namespace of its own, which is what makes it
+    -- possible to have two models that both define model and config
+    constant golden : python_session_t := "golden";
+    constant fixed_point : python_session_t := "fixed_point";
+
+    variable cycles : unsigned(63 downto 0) := x"123456789ABCDEF0";
+    variable value : unsigned(31 downto 0) := x"DEADBEEF";
+    variable offset : signed(15 downto 0) := to_signed(-12345, 16);
+    variable received : unsigned(63 downto 0);
+    variable status : unsigned(15 downto 0);
+    variable image, transposed : integer_array_t;
+    variable coefficients : real_vector(0 to 2);
+    variable table : integer_vector_ptr_t;
 
     procedure set_tcl_installation is
     begin
@@ -125,6 +144,13 @@ begin
       end loop;
 
       return result;
+    end;
+
+    -- The model of the device used in some of the examples below is the Python
+    -- module device_model.py, next to this testbench
+    procedure import_device_model is
+    begin
+      import_module_from_file(tb_path(runner_cfg) & "device_model.py", "device_model");
     end;
 
   begin
@@ -220,6 +246,37 @@ begin
         check(length(test_input) >= 1);
         check(length(test_input) <= 100);
 
+      elsif run("Test result types of eval and call") then
+        -- eval and call convert the Python value to the VHDL type the context expects.
+        -- The result types a function cannot size by itself are procedures instead.
+        import_device_model;
+
+        -- A boolean result can be used directly as a condition
+        if eval("device_model.is_busy()") then
+          info("The device reports that it is busy");
+        else
+          check_failed("The device should report that it is busy");
+        end if;
+        check_true(call_boolean("device_model.is_busy"));
+
+        -- A single bit and a vector of bits, std_ulogic characters on the Python side
+        check_equal(call_std_ulogic("device_model.parity"), '1', result("for the parity of the status"));
+        check_equal(call_std_ulogic_vector("device_model.status_bits"), std_ulogic_vector'(x"BEEF"));
+
+        -- The procedure form takes the width of the result from the variable it writes to
+        call_unsigned("device_model.status_word", status);
+        check_equal(status, unsigned'(x"BEEF"));
+
+        -- Strings, real vectors and dynamically sized integer vectors
+        check_equal(call_string("device_model.status_name"), "running");
+        coefficients := call_real_vector("device_model.coefficients");
+        check_equal(coefficients(0), 0.5);
+        check_equal(coefficients(2), 0.125);
+        table := call_integer_vector_ptr("device_model.sine_table", arg(4));
+        check_equal(length(table), 4);
+        check_equal(get(table, 0), 0);
+        check_equal(get(table, 3), 30273);
+
       elsif run("Test run script functions") then
         -- As we've seen we can define Python functions with exec (fibonacci) and we can import functions from
         -- Python packages. Writing large functions in exec strings is not optimal since we don't
@@ -242,6 +299,54 @@ begin
         -- Regardless of module name, direct access is also possible
         exec("from my_run_script import hello_world");
         exec("hello_world()");
+
+      elsif run("Test exec_file and import_module_from_file") then
+        -- Any Python file can be executed as it is, or imported as a module by its path.
+        -- The difference shows for a file that has a state of its own.
+
+        -- exec_file executes the file in the namespace we have been using all along,
+        -- which puts counter and bump there. The file name is relative to the run script.
+        exec_file("bump.py");
+        check_equal(integer'(call("bump")), 1);
+        check_equal(integer'(call("bump")), 2);
+
+        -- Executing it a second time executes counter = 0 again, which is easy to miss
+        exec_file("bump.py");
+        check_equal(integer'(call("bump")), 1, result("for the counter after re-executing the file"));
+
+        -- import_module_from_file gives us the module object, which keeps its state
+        import_module_from_file(tb_path(runner_cfg) & "bump.py", "bumper");
+        check_equal(integer'(call("bumper.bump")), 1);
+        check_equal(integer'(call("bumper.bump")), 2);
+
+        -- Executing the file once more does not touch the module
+        exec_file("bump.py");
+        check_equal(integer'(call("bumper.bump")), 3, result("for the counter of the imported module"));
+
+      elsif run("Test sessions") then
+        -- So far all Python code has been running in one and the same namespace. Every
+        -- operation also takes a session that selects a namespace of its own, which is
+        -- what makes it possible to have two models of the same integrator, both
+        -- defining model and config, loaded side by side.
+        exec_file("golden_model.py", golden);
+        exec_file("fixed_point_model.py", fixed_point);
+
+        check_equal(eval_string("config['name']", golden), "golden");
+        check_equal(eval_string("config['name']", fixed_point), "fixed_point");
+
+        -- Each model keeps a state of its own. The golden model integrates in full
+        -- precision while the fixed point model rounds every step.
+        check_equal(real'(call("model.step", arg(3), session => golden)), 1.5);
+        check_equal(real'(call("model.step", arg(3), session => fixed_point)), 2.0);
+        check_equal(real'(call("model.step", arg(3), session => golden)), 3.0);
+        check_equal(real'(call("model.step", arg(3), session => fixed_point)), 4.0);
+
+        -- Only the names defined by the executed code are separate. Imported modules are
+        -- shared, so the NumPy the fixed point model imported is the one the golden
+        -- session gets and an attribute set on it is visible in both.
+        exec("import numpy as np", golden);
+        exec("np.vunit_example_marker = 7", fixed_point);
+        check_equal(eval_integer("np.vunit_example_marker", golden), 7);
 
       elsif run("Test function call helpers") then
         exec("from math import gcd"); -- gcd = greatest common divisor
@@ -270,6 +375,68 @@ begin
         check_equal(eval("l[0]"), 2);
         check_equal(eval("l[1]"), 1);
 
+      elsif run("Test keyword argument groups") then
+        -- Keyword arguments combined with & become a single argument. That makes it
+        -- possible to pass more than the 10 arguments call takes, and to build the
+        -- keyword arguments of a call in steps, for example one group per register block.
+        import_device_model;
+
+        -- A register dump: five samples passed positionally and 20 status registers
+        -- passed as one keyword argument group after them. The group uses one of the
+        -- 10 argument slots no matter how many keyword arguments it holds.
+        check_equal(
+          integer'(call(
+            "device_model.check_status",
+            arg(integer_vector'(3, 1, 4, 1, 5)),
+
+            -- The data path registers...
+            (kwarg("temperature", 42) & kwarg("voltage", 3300) & kwarg("fifo_level", 17) &
+             kwarg("fifo_depth", 64) & kwarg("overflows", 0) & kwarg("underflows", 0) &
+             kwarg("packets_in", 1024) & kwarg("packets_out", 1024) & kwarg("crc_errors", 0) &
+             kwarg("dropped", 0)) &
+
+            -- ...and the link registers, as a group of their own
+            (kwarg("link_up", true) & kwarg("lane_count", 4) & kwarg("gain", 1.5) &
+             kwarg("threshold", -3) & kwarg("window", 8) & kwarg("mode", string'("loopback")) &
+             kwarg("revision", 2) & kwarg("uptime", 86400) & kwarg("retries", 3) &
+             kwarg("errors", 0))
+          )),
+          20,
+          result("for the number of status registers Python received")
+        );
+
+      elsif run("Test wide integers and status bits") then
+        -- An unsigned or signed argument of any width becomes an exact Python integer and
+        -- is therefore not limited to the range of a VHDL integer, while a std_ulogic
+        -- argument becomes a bool. These have names of their own rather than being arg
+        -- overloads since a string literal belongs to every character array type.
+        import_device_model;
+
+        -- A 64 bit cycle counter, a negative offset and a 32 bit value above 2**31 all
+        -- reach Python with their exact values
+        check_equal(
+          call_string(
+            "device_model.status_text",
+            arg_unsigned(cycles), arg_signed(offset),
+            kwarg_unsigned("value", value) & kwarg("flag", '1')
+          ),
+          "cycles=1311768467463790320 offset=-12345 value=3735928559 flag=True"
+        );
+
+        -- H and L are read as 1 and 0, here in the flag
+        check_equal(
+          call_string(
+            "device_model.status_text",
+            arg_unsigned(cycles), arg_signed(offset),
+            kwarg_unsigned("value", value) & kwarg("flag", 'H')
+          ),
+          "cycles=1311768467463790320 offset=-12345 value=3735928559 flag=True"
+        );
+
+        -- The width of the result is given by the variable the procedure form writes to
+        call_unsigned("device_model.roundtrip", received, arg_unsigned(cycles));
+        check_equal(received, cycles);
+
       -------------------------------------------------------------------------------------
       -- Examples related to error management
       --
@@ -287,6 +454,30 @@ begin
 
       elsif run("Test Python exception") then
         vhdl_integer := eval("1 / 0"); -- Division by zero exception
+
+      elsif run("Test error handling of a Python model") then
+        -- The failures above are reported on python_logger and that logger can be mocked.
+        -- That is how a model is tested for what it does with invalid input, here an
+        -- empty sine table, without the test failing.
+        import_device_model;
+        exec("from device_model import sine_table, failure_text");
+
+        mock(python_logger, failure);
+        table := call_integer_vector_ptr("sine_table", arg(0));
+        check_only_log(
+          python_logger,
+          -- The message is the failing operation and the Python traceback, ending with
+          -- the text of the exception. failure_text reproduces the traceback by
+          -- evaluating the same expression; the source name in the traceback is the one
+          -- the failing eval got, the first of this test case since exec is counted
+          -- separately.
+          "eval(""sine_table(0)"") failed:" & LF &
+          call_string(
+            "failure_text", arg(string'("sine_table(0)")), arg(string'("<eval #1>"))
+          ),
+          failure
+        );
+        unmock(python_logger);
 
       -------------------------------------------------------------------------------------
       -- Examples related to the simulation environment
@@ -394,6 +585,34 @@ begin
         check(eval_integer("solution['y']") <= eval_integer("solution['z']"));
         check_equal(eval_integer("solution['x']") + eval_integer("solution['y']"), 8);
 
+      elsif run("Test NumPy arrays both ways") then
+        -- integer_array_t is the VUnit type for data sets such as images and it is passed
+        -- to Python as a NumPy array of the same shape. An array returned by Python
+        -- becomes a new integer_array_t. The indexing matches: get(a, x, y) is a[y, x].
+        import_module_from_file(tb_path(runner_cfg) & "image_model.py", "image_model");
+
+        -- A 4 x 3 image with the column in the ones and the row in the tens
+        image := new_2d(width => 4, height => 3, bit_width => 8, is_signed => false);
+        for y in 0 to height(image) - 1 loop
+          for x in 0 to width(image) - 1 loop
+            set(image, x, y, 10 * y + x);
+          end loop;
+        end loop;
+
+        -- Python sees the pixel VHDL sees, with the indices the other way around
+        check_equal(integer'(call("image_model.pixel", arg(image), arg(2), arg(1))), get(image, 2, 1));
+
+        -- NumPy transposes the image and the result comes back as an integer_array_t
+        transposed := call_integer_array("image_model.transpose", arg(image));
+        check_equal(width(transposed), height(image), result("for the width of the transposed image"));
+        check_equal(height(transposed), width(image), result("for the height of the transposed image"));
+        for y in 0 to height(image) - 1 loop
+          for x in 0 to width(image) - 1 loop
+            check_equal(get(transposed, y, x), get(image, x, y));
+          end loop;
+        end loop;
+        deallocate(transposed);
+
       elsif run("Test using a Python module as the golden reference") then
         -- In this example we want to test that a receiver correctly accepts
         -- a packet with a trailing CRC. While we can generate a correct CRC to
@@ -456,6 +675,16 @@ begin
         out_tvalid <= '0';
         out_tlast <= '0';
         crc_error <= '0';
+
+      elsif run("Test a verification component written in Python") then
+        -- Taking the previous example one step further, the behavioral model can be a
+        -- component of its own. The behaviour of python_model is a Python function and
+        -- the VHDL only passes values, so this test case never mentions Python.
+        for idx in 1 to 3 loop
+          model_x <= idx;
+          wait for clk_period;
+          check_equal(model_y, 2 * idx + 1, result("for the output of the model"));
+        end loop;
 
 
       ---------------------------------------------------------------------
@@ -535,4 +764,9 @@ begin
     in_tlast <= '0';
     wait;
   end process;
+
+  -- A component whose behaviour is a Python function
+  python_model_inst : entity work.python_model
+    generic map(model_file => tb_path(runner_cfg) & "python_model.py")
+    port map(x => model_x, y => model_y);
 end;

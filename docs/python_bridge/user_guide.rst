@@ -554,6 +554,17 @@ the Python bridge like NVC and GHDL.
 See :vunit_example:`➚ examples/vhdl/embedded_python <vhdl/embedded_python>` for
 a complete example covering all three simulator families.
 
+Its ``tb_example.vhd`` has a test case for each part of the API: ``exec`` and
+``eval`` with the types they convert, calls with positional, keyword and
+keyword group arguments, a 20 register status dump, wide
+``arg_unsigned``/``arg_signed`` and ``std_ulogic`` argument values, a 2-D
+``integer_array_t`` image transposed by NumPy, the result types of ``eval`` and
+``call``, Python files executed with ``exec_file`` or imported with
+``import_module_from_file``, two models loaded into a session each, and a
+Python model failing with ``python_logger`` mocked. Its last test case drives
+``python_model``, a verification component whose behaviour is the Python
+function in ``python_model.py`` rather than VHDL.
+
 .. automodule:: vunit.python_pkg
 
 .. _python_bridge:native:
