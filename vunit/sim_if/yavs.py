@@ -5,7 +5,7 @@
 # Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 
 """
-Interface for the rsim simulator
+Interface for the yavs simulator
 """
 
 from pathlib import Path
@@ -28,33 +28,33 @@ from . import hooks
 LOGGER = logging.getLogger(__name__)
 
 
-class RSIMInterface(SimulatorInterface, ViewerMixin):
+class YavsInterface(SimulatorInterface, ViewerMixin):
     """
-    Interface for the rsim simulator
+    Interface for the yavs simulator
     """
 
-    name = "rsim"
-    executable = environ.get("RSIM", "rsim")
+    name = "yavs"
+    executable = environ.get("YAVS", "yavs")
     supports_gui_flag = True
     supports_colors_in_gui = True
-    # rsim locks each library while it analyzes into it, see the CLI contract
+    # yavs locks each library while it analyzes into it, see the CLI contract
     supports_concurrent_compiles_into_library = True
-    # rsim analyze takes several files, analyzed in order, and reads them from a response file
+    # yavs analyze takes several files, analyzed in order, and reads them from a response file
     supports_batch_compile = True
     # One file name per line, taken verbatim
     batch_file_list_arguments = ("@{}",)
 
     compile_options = [
-        ListOfStringOption("rsim.global_flags"),
-        ListOfStringOption("rsim.a_flags"),
+        ListOfStringOption("yavs.global_flags"),
+        ListOfStringOption("yavs.a_flags"),
     ]
 
     sim_options = [
-        ListOfStringOption("rsim.global_flags"),
-        ListOfStringOption("rsim.elab_flags"),
-        ListOfStringOption("rsim.sim_flags"),
-        StringOption("rsim.viewer_script.gui"),
-        StringOption("rsim.viewer.gui"),
+        ListOfStringOption("yavs.global_flags"),
+        ListOfStringOption("yavs.elab_flags"),
+        ListOfStringOption("yavs.sim_flags"),
+        StringOption("yavs.viewer_script.gui"),
+        StringOption("yavs.viewer.gui"),
     ]
 
     @classmethod
@@ -63,7 +63,7 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         Create instance from args namespace
         """
         prefix = cls.find_prefix()
-        check_executable("RSIM", prefix, cls.executable)
+        check_executable("YAVS", prefix, cls.executable)
         cls.check_version(prefix)
 
         return cls(
@@ -78,7 +78,7 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
     @classmethod
     def find_prefix_from_path(cls):
         """
-        Find first valid rsim toolchain prefix
+        Find first valid yavs toolchain prefix
         """
         return cls.find_toolchain([cls.executable])
 
@@ -87,7 +87,7 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
     ):
         SimulatorInterface.__init__(self, output_path, gui)
         if viewer_fmt not in (None, "fst"):
-            LOGGER.warning("rsim only writes fst, ignoring --viewer-fmt=%s", viewer_fmt)
+            LOGGER.warning("yavs only writes fst, ignoring --viewer-fmt=%s", viewer_fmt)
         ViewerMixin.__init__(self, gui=gui, viewer=viewer, viewer_fmt="fst", viewer_args=viewer_args)
 
         self._prefix = prefix
@@ -96,21 +96,21 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
     @classmethod
     def _get_version_output(cls, prefix):
         """
-        Get the output of 'rsim --version'
+        Get the output of 'yavs --version'
         """
         return subprocess.check_output([str(Path(prefix) / cls.executable), "--version"]).decode()
 
     @classmethod
     def determine_version(cls, prefix):
         """
-        Determine the rsim version
+        Determine the yavs version
         """
-        return RSIMVersion.from_output(cls._get_version_output(prefix))
+        return YavsVersion.from_output(cls._get_version_output(prefix))
 
     @classmethod
     def check_version(cls, prefix):
         """
-        Raise an error unless 'rsim --version' works and reports a version implementing the VUnit CLI contract
+        Raise an error unless 'yavs --version' works and reports a version implementing the VUnit CLI contract
         """
         try:
             version = cls.determine_version(prefix)
@@ -118,10 +118,10 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
             raise RuntimeError(f"Running '{Path(prefix) / cls.executable} --version' failed: {exc}") from exc
 
         if not version.is_valid:
-            raise RuntimeError(f"Cannot parse the rsim version from {version.version_string!r}")
+            raise RuntimeError(f"Cannot parse the yavs version from {version.version_string!r}")
 
-        if version < RSIM_MIN_VERSION:
-            raise RuntimeError(f"rsim {version} is too old for VUnit, {RSIM_MIN_VERSION} or later is required")
+        if version < YAVS_MIN_VERSION:
+            raise RuntimeError(f"yavs {version} is too old for VUnit, {YAVS_MIN_VERSION} or later is required")
 
         return version
 
@@ -158,14 +158,14 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         """
         Returns True when this simulator supports VHDL-2019 reflection (std.reflection)
 
-        This is a target, not yet a claim: std.reflection is planned for rsim's 2019 mode, and until it
-        lands record_dict_pkg (vunit/vhdl/record_dict) fails to analyze on rsim.
+        This is a target, not yet a claim: std.reflection is planned for yavs's 2019 mode, and until it
+        lands record_dict_pkg (vunit/vhdl/record_dict) fails to analyze on yavs.
         """
         return True
 
     def setup_library_mapping(self, project):
         """
-        Setup library mapping. A library is a directory that rsim creates on first analysis,
+        Setup library mapping. A library is a directory that yavs creates on first analysis,
         and a missing directory is an empty library, so there is nothing to initialise.
         """
         self._project = project
@@ -173,11 +173,11 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         for library in project.get_libraries():
             makedirs(Path(library.directory).parent, exist_ok=True)
 
-        # rsim records the standard of each file, so 2008 and 2019 files can be mixed
+        # yavs records the standard of each file, so 2008 and 2019 files can be mixed
         for source_file in project.get_source_files_in_order():
             if source_file.is_vhdl and source_file.get_vhdl_standard() not in (VHDL.STD_2008, VHDL.STD_2019):
                 raise RuntimeError(
-                    f"rsim supports VHDL-2008 and VHDL-2019 only, found VHDL-{source_file.get_vhdl_standard()}"
+                    f"yavs supports VHDL-2008 and VHDL-2019 only, found VHDL-{source_file.get_vhdl_standard()}"
                     f" for {source_file.name}"
                 )
 
@@ -193,7 +193,7 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
 
     def _get_command(self, subcommand, worklib, workpath):
         """
-        Get basic rsim command with library mapping
+        Get basic yavs command with library mapping
         """
         cmd = [
             str(Path(self._prefix) / self.executable),
@@ -215,14 +215,14 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         """
         cmd = self._get_command("analyze", source_file.library.name, source_file.library.directory)
         cmd.insert(2, f"--std={source_file.get_vhdl_standard()}")
-        cmd += source_file.compile_options.get("rsim.global_flags", [])
-        cmd += source_file.compile_options.get("rsim.a_flags", [])
+        cmd += source_file.compile_options.get("yavs.global_flags", [])
+        cmd += source_file.compile_options.get("yavs.a_flags", [])
         cmd += [source_file.name]
         return cmd
 
     def _get_viewer(self, config):
         """
-        Prefer Surfer, which the rsim GUI will embed, when no viewer is given.
+        Prefer Surfer, which the yavs GUI will embed, when no viewer is given.
         """
         if (
             self._viewer is None
@@ -237,7 +237,7 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         Simulate with entity as top level using generics
         """
         libdir = self._project.get_library(config.library_name).directory
-        # No --std: rsim elaborates with the standard recorded for the top level
+        # No --std: yavs elaborates with the standard recorded for the top level
         cmd = self._get_command("elab" if elaborate_only else "run", config.library_name, libdir)
         script_path = Path(output_path) / self.name
         makedirs(script_path, exist_ok=True)
@@ -245,15 +245,15 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         if not elaborate_only and config.sim_options.get("disable_ieee_warnings", False):
             cmd += ["--ieee-warnings=off"]
 
-        cmd += config.sim_options.get("rsim.global_flags", [])
-        cmd += config.sim_options.get("rsim.elab_flags", [])
+        cmd += config.sim_options.get("yavs.global_flags", [])
+        cmd += config.sim_options.get("yavs.elab_flags", [])
         cmd += hooks.get_flags(self, "elab_flags")
 
         wave_file = None
         if not elaborate_only:
-            cmd += config.sim_options.get("rsim.sim_flags", [])
+            cmd += config.sim_options.get("yavs.sim_flags", [])
             cmd += hooks.get_flags(self, "run_flags")
-            # Last one wins in rsim, so this overrides any --exit-severity in rsim.sim_flags
+            # Last one wins in yavs, so this overrides any --exit-severity in yavs.sim_flags
             cmd += [f"--exit-severity={config.vhdl_assert_stop_level}"]
 
             if self._gui:
@@ -296,14 +296,14 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
 
 def write_response_file(file_name, args):
     """
-    Write args to an rsim response file, one argument per line taken verbatim, and return its name.
+    Write args to an yavs response file, one argument per line taken verbatim, and return its name.
 
     A response file keeps long generics such as runner_cfg clear of the Windows command line length limit
     and of its quoting rules.
     """
     for arg in args:
         if "\n" in arg or "\r" in arg:
-            raise ValueError(f"rsim arguments cannot contain line breaks: {arg!r}")
+            raise ValueError(f"yavs arguments cannot contain line breaks: {arg!r}")
 
     with open(file_name, "w", encoding="utf-8", newline="\n") as fptr:
         fptr.write("".join(arg + "\n" for arg in args))
@@ -311,8 +311,8 @@ def write_response_file(file_name, args):
 
 
 @total_ordering
-class RSIMVersion:
-    """rsim version number."""
+class YavsVersion:
+    """yavs version number."""
 
     _VERSION_RE = re.compile(r"([0-9]+)\.([0-9]+)(?:\.([0-9]+))?")
 
@@ -322,7 +322,7 @@ class RSIMVersion:
         match = self._VERSION_RE.match(version_string)
         if not match:
             warnings.warn(
-                f"Cannot parse rsim version: {version_string!r}; version is unknown",
+                f"Cannot parse yavs version: {version_string!r}; version is unknown",
                 RuntimeWarning,
                 stacklevel=2,
             )
@@ -332,7 +332,7 @@ class RSIMVersion:
 
     @classmethod
     def from_output(cls, output):
-        """Extract the rsim version from 'rsim --version' output, or return an unknown version."""
+        """Extract the yavs version from 'yavs --version' output, or return an unknown version."""
         match = cls._VERSION_RE.search(output)
         return cls(match.group(0) if match else output)
 
@@ -341,16 +341,16 @@ class RSIMVersion:
         return self._version is not None
 
     def __eq__(self, other):
-        if isinstance(other, RSIMVersion):
+        if isinstance(other, YavsVersion):
             if not self.is_valid or not other.is_valid:
-                raise ValueError("Cannot compare unknown rsim versions")
+                raise ValueError("Cannot compare unknown yavs versions")
             return self._version == other._version  # pylint: disable=protected-access
         return NotImplemented
 
     def __lt__(self, other):
-        if isinstance(other, RSIMVersion):
+        if isinstance(other, YavsVersion):
             if not self.is_valid or not other.is_valid:
-                raise ValueError("Cannot order unknown rsim versions")
+                raise ValueError("Cannot order unknown yavs versions")
             return self._version < other._version  # pylint: disable=protected-access
         return NotImplemented
 
@@ -358,8 +358,8 @@ class RSIMVersion:
         return ".".join(str(component) for component in self._version) if self.is_valid else "unknown"
 
     def __repr__(self):
-        return f"RSIMVersion({self.version_string!r})"
+        return f"YavsVersion({self.version_string!r})"
 
 
-# The first rsim version implementing the VUnit CLI contract. Raise it when VUnit starts relying on a newer contract.
-RSIM_MIN_VERSION = RSIMVersion("0.0.0")
+# The first yavs version implementing the VUnit CLI contract. Raise it when VUnit starts relying on a newer contract.
+YAVS_MIN_VERSION = YavsVersion("0.0.0")

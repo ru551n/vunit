@@ -5,7 +5,7 @@
 # Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 
 """
-Test the rsim interface
+Test the yavs interface
 """
 
 import os
@@ -16,7 +16,7 @@ from pathlib import Path
 from shutil import rmtree
 from types import SimpleNamespace
 from unittest import mock
-from vunit.sim_if.rsim import RSIMInterface, RSIMVersion, write_response_file
+from vunit.sim_if.yavs import YavsInterface, YavsVersion, write_response_file
 from vunit.sim_if.factory import SIMULATOR_FACTORY
 from vunit.project import Project
 from vunit.ostools import Process, renew_path, write_file
@@ -41,36 +41,36 @@ def make_config(**kwargs):
     return config
 
 
-class TestRSIMVersion(unittest.TestCase):
+class TestYavsVersion(unittest.TestCase):
     def test_from_version_output(self):
-        version = RSIMVersion.from_output("rsim 0.4.0-dev (1a2b3c4 2026-10-18)\n")
-        self.assertEqual(version, RSIMVersion("0.4.0"))
+        version = YavsVersion.from_output("yavs 0.4.0-dev (1a2b3c4 2026-10-18)\n")
+        self.assertEqual(version, YavsVersion("0.4.0"))
         self.assertEqual(str(version), "0.4.0")
 
     def test_versions_are_ordered(self):
-        self.assertLess(RSIMVersion("0.4"), RSIMVersion("0.4.1"))
-        self.assertLess(RSIMVersion("0.9.9"), RSIMVersion("0.10.0"))
-        self.assertEqual(RSIMVersion("1.0"), RSIMVersion("1.0.0"))
+        self.assertLess(YavsVersion("0.4"), YavsVersion("0.4.1"))
+        self.assertLess(YavsVersion("0.9.9"), YavsVersion("0.10.0"))
+        self.assertEqual(YavsVersion("1.0"), YavsVersion("1.0.0"))
 
     def test_unrecognized_version_warns_and_is_unknown(self):
         with self.assertWarnsRegex(RuntimeWarning, "version is unknown"):
-            version = RSIMVersion.from_output("no version here")
+            version = YavsVersion.from_output("no version here")
         self.assertFalse(version.is_valid)
-        with self.assertRaisesRegex(ValueError, "Cannot order unknown rsim versions"):
-            version < RSIMVersion("1.0")  # pylint: disable=expression-not-assigned
+        with self.assertRaisesRegex(ValueError, "Cannot order unknown yavs versions"):
+            version < YavsVersion("1.0")  # pylint: disable=expression-not-assigned
 
 
-class TestRSIMInterface(unittest.TestCase):
+class TestYavsInterface(unittest.TestCase):
     """
-    Test the rsim interface
+    Test the yavs interface
     """
 
     def setUp(self):
-        self.output_path = str(Path(__file__).parent / "test_rsim_interface_out")
+        self.output_path = str(Path(__file__).parent / "test_yavs_interface_out")
         renew_path(self.output_path)
         self.cwd = os.getcwd()
         os.chdir(self.output_path)
-        self.simif = RSIMInterface(prefix="prefix", output_path=self.output_path)
+        self.simif = YavsInterface(prefix="prefix", output_path=self.output_path)
 
     def tearDown(self):
         os.chdir(self.cwd)
@@ -88,22 +88,22 @@ class TestRSIMInterface(unittest.TestCase):
         return project
 
     def test_is_registered_last(self):
-        # Last so that an installed rsim is never picked over an established simulator by default
-        self.assertIs(SIMULATOR_FACTORY.supported_simulators()[-1], RSIMInterface)
-        self.assertIn("rsim.a_flags", SIMULATOR_FACTORY._compile_options)  # pylint: disable=protected-access
-        self.assertIn("rsim.sim_flags", SIMULATOR_FACTORY._sim_options)  # pylint: disable=protected-access
+        # Last so that an installed yavs is never picked over an established simulator by default
+        self.assertIs(SIMULATOR_FACTORY.supported_simulators()[-1], YavsInterface)
+        self.assertIn("yavs.a_flags", SIMULATOR_FACTORY._compile_options)  # pylint: disable=protected-access
+        self.assertIn("yavs.sim_flags", SIMULATOR_FACTORY._sim_options)  # pylint: disable=protected-access
 
     def test_capabilities(self):
-        self.assertTrue(RSIMInterface.has_valid_exit_code())
-        self.assertTrue(RSIMInterface.supports_vhdl_package_generics())
-        self.assertTrue(RSIMInterface.supports_vhdl_call_paths())
-        self.assertTrue(RSIMInterface.supports_vhpi())
-        self.assertFalse(RSIMInterface.supports_coverage())
-        # rsim locks its libraries (CLI contract section 3)
-        self.assertTrue(RSIMInterface.supports_concurrent_compiles_into_library)
-        self.assertTrue(RSIMInterface.supports_batch_compile)
-        # A target: record_dict_pkg fails on rsim until std.reflection lands
-        self.assertTrue(RSIMInterface.supports_vhdl_reflection())
+        self.assertTrue(YavsInterface.has_valid_exit_code())
+        self.assertTrue(YavsInterface.supports_vhdl_package_generics())
+        self.assertTrue(YavsInterface.supports_vhdl_call_paths())
+        self.assertTrue(YavsInterface.supports_vhpi())
+        self.assertFalse(YavsInterface.supports_coverage())
+        # yavs locks its libraries (CLI contract section 3)
+        self.assertTrue(YavsInterface.supports_concurrent_compiles_into_library)
+        self.assertTrue(YavsInterface.supports_batch_compile)
+        # A target: record_dict_pkg fails on yavs until std.reflection lands
+        self.assertTrue(YavsInterface.supports_vhdl_reflection())
 
     @mock.patch("vunit.sim_if.check_output", autospec=True)
     def test_compile_project_in_a_batch_with_a_file_list(self, check_output):
@@ -125,7 +125,7 @@ class TestRSIMInterface(unittest.TestCase):
             self.assertEqual(
                 command[:-1],
                 [
-                    str(Path("prefix") / "rsim"),
+                    str(Path("prefix") / "yavs"),
                     "analyze",
                     std,
                     "--work=lib:lib_path",
@@ -162,7 +162,7 @@ class TestRSIMInterface(unittest.TestCase):
         self.simif.compile_project(project)
         check_output.assert_called_once_with(
             [
-                str(Path("prefix") / "rsim"),
+                str(Path("prefix") / "yavs"),
                 "analyze",
                 "--std=2019",
                 "--work=lib:lib_path",
@@ -173,7 +173,7 @@ class TestRSIMInterface(unittest.TestCase):
             ],
             env=self.simif.get_env(),
         )
-        # The parent of each library is created, the library itself is left to rsim
+        # The parent of each library is created, the library itself is left to yavs
         self.assertTrue(Path("libs").is_dir())
         self.assertFalse(Path("libs", "other path").exists())
 
@@ -181,8 +181,8 @@ class TestRSIMInterface(unittest.TestCase):
     def test_compile_project_extra_flags(self, check_output):
         project = self._project("2008")
         source_file = project.get_source_files_in_order()[0]
-        source_file.set_compile_option("rsim.global_flags", ["--relaxed"])
-        source_file.set_compile_option("rsim.a_flags", ["-Werror"])
+        source_file.set_compile_option("yavs.global_flags", ["--relaxed"])
+        source_file.set_compile_option("yavs.a_flags", ["-Werror"])
         self.simif.compile_project(project)
         cmd = check_output.call_args[0][0]
         self.assertEqual(cmd[-3:], ["--relaxed", "-Werror", "file0.vhd"])
@@ -190,7 +190,7 @@ class TestRSIMInterface(unittest.TestCase):
 
     @mock.patch("vunit.sim_if.check_output", autospec=True)
     def test_compile_failure_is_reported(self, check_output):
-        check_output.side_effect = subprocess.CalledProcessError(1, "rsim", output="error[E0001]: bad")
+        check_output.side_effect = subprocess.CalledProcessError(1, "yavs", output="error[E0001]: bad")
         with self.assertRaises(CompileError):
             self.simif.compile_project(self._project("2008"))
 
@@ -206,12 +206,12 @@ class TestRSIMInterface(unittest.TestCase):
 
     def _simulate(self, config, elaborate_only=False, gui=False, returncode=0):
         if gui:
-            self.simif = RSIMInterface(prefix="prefix", output_path=self.output_path, gui=True, viewer="surfer")
+            self.simif = YavsInterface(prefix="prefix", output_path=self.output_path, gui=True, viewer="surfer")
         self.simif.setup_library_mapping(self._project("2008"))
         with (
-            mock.patch("vunit.sim_if.rsim.Process", autospec=True) as process,
-            mock.patch("vunit.sim_if.rsim.subprocess.call", autospec=True) as call,
-            mock.patch.object(RSIMInterface, "find_executable", return_value=["surfer"]),
+            mock.patch("vunit.sim_if.yavs.Process", autospec=True) as process,
+            mock.patch("vunit.sim_if.yavs.subprocess.call", autospec=True) as call,
+            mock.patch.object(YavsInterface, "find_executable", return_value=["surfer"]),
         ):
             process.NonZeroExitCode = Process.NonZeroExitCode
             if returncode:
@@ -220,8 +220,8 @@ class TestRSIMInterface(unittest.TestCase):
 
         # The arguments after the subcommand are passed in a response file
         cmd = process.call_args[0][0]
-        response_file = Path(self.output_path) / "rsim" / "args.rsp"
-        self.assertEqual(cmd, [str(Path("prefix") / "rsim"), "elab" if elaborate_only else "run", f"@{response_file}"])
+        response_file = Path(self.output_path) / "yavs" / "args.rsp"
+        self.assertEqual(cmd, [str(Path("prefix") / "yavs"), "elab" if elaborate_only else "run", f"@{response_file}"])
         args = response_file.read_bytes().decode("utf-8").split("\n")
         self.assertEqual(args.pop(), "")
         return status, cmd[:2] + args, call
@@ -231,9 +231,9 @@ class TestRSIMInterface(unittest.TestCase):
         config = make_config(
             generics={"runner_cfg": runner_cfg, "width": 8},
             sim_options={
-                "rsim.global_flags": ["--threads=2"],
-                "rsim.elab_flags": ["--relaxed"],
-                "rsim.sim_flags": ["--exit-severity=failure", "--stop-time=1ms"],
+                "yavs.global_flags": ["--threads=2"],
+                "yavs.elab_flags": ["--relaxed"],
+                "yavs.sim_flags": ["--exit-severity=failure", "--stop-time=1ms"],
                 "disable_ieee_warnings": True,
             },
         )
@@ -242,7 +242,7 @@ class TestRSIMInterface(unittest.TestCase):
         self.assertEqual(
             cmd,
             [
-                str(Path("prefix") / "rsim"),
+                str(Path("prefix") / "yavs"),
                 "run",
                 "--work=lib:lib_path",
                 "--map=lib:lib_path",
@@ -267,7 +267,7 @@ class TestRSIMInterface(unittest.TestCase):
         self.assertEqual(cmd[-2:], ["--exit-severity=failure", "cfg"])
 
     def test_elaborate_only(self):
-        config = make_config(sim_options={"rsim.elab_flags": ["--relaxed"], "rsim.sim_flags": ["--stop-time=1ms"]})
+        config = make_config(sim_options={"yavs.elab_flags": ["--relaxed"], "yavs.sim_flags": ["--stop-time=1ms"]})
         _, cmd, _ = self._simulate(config, elaborate_only=True)
         self.assertEqual(cmd[1], "elab")
         self.assertIn("--relaxed", cmd)
@@ -279,9 +279,9 @@ class TestRSIMInterface(unittest.TestCase):
         self.assertFalse(status)
 
     def test_gui_writes_fst_and_opens_viewer(self):
-        config = make_config(sim_options={"rsim.viewer_script.gui": "init.tcl"})
+        config = make_config(sim_options={"yavs.viewer_script.gui": "init.tcl"})
         _, cmd, call = self._simulate(config, gui=True)
-        wave_file = Path(self.output_path) / "rsim" / "tb.fst"
+        wave_file = Path(self.output_path) / "yavs" / "tb.fst"
         self.assertIn(f"--wave={wave_file}", cmd)
         self.assertLess(cmd.index(f"--wave={wave_file}"), cmd.index("tb.arch"))
         call.assert_called_once_with(["surfer", str(wave_file), "--script", str(Path("init.tcl").resolve())])
@@ -303,33 +303,33 @@ class TestRSIMInterface(unittest.TestCase):
                 write_response_file(Path(self.output_path) / "args.rsp", [arg])
 
     def test_check_version(self):
-        with mock.patch.object(RSIMInterface, "_get_version_output", return_value="rsim 0.1.0\n"):
-            self.assertEqual(RSIMInterface.check_version("prefix"), RSIMVersion("0.1.0"))
+        with mock.patch.object(YavsInterface, "_get_version_output", return_value="yavs 0.1.0\n"):
+            self.assertEqual(YavsInterface.check_version("prefix"), YavsVersion("0.1.0"))
 
         with (
-            mock.patch.object(RSIMInterface, "_get_version_output", return_value="garbage"),
+            mock.patch.object(YavsInterface, "_get_version_output", return_value="garbage"),
             self.assertWarns(RuntimeWarning),
-            self.assertRaisesRegex(RuntimeError, "Cannot parse the rsim version from 'garbage'"),
+            self.assertRaisesRegex(RuntimeError, "Cannot parse the yavs version from 'garbage'"),
         ):
-            RSIMInterface.check_version("prefix")
+            YavsInterface.check_version("prefix")
 
         with (
-            mock.patch.object(RSIMInterface, "_get_version_output", side_effect=OSError("boom")),
+            mock.patch.object(YavsInterface, "_get_version_output", side_effect=OSError("boom")),
             self.assertRaisesRegex(RuntimeError, "--version' failed: boom"),
         ):
-            RSIMInterface.check_version("prefix")
+            YavsInterface.check_version("prefix")
 
         with (
-            mock.patch("vunit.sim_if.rsim.RSIM_MIN_VERSION", RSIMVersion("1.0")),
-            mock.patch.object(RSIMInterface, "_get_version_output", return_value="rsim 0.9.0"),
-            self.assertRaisesRegex(RuntimeError, "rsim 0.9.0 is too old for VUnit, 1.0.0 or later is required"),
+            mock.patch("vunit.sim_if.yavs.YAVS_MIN_VERSION", YavsVersion("1.0")),
+            mock.patch.object(YavsInterface, "_get_version_output", return_value="yavs 0.9.0"),
+            self.assertRaisesRegex(RuntimeError, "yavs 0.9.0 is too old for VUnit, 1.0.0 or later is required"),
         ):
-            RSIMInterface.check_version("prefix")
+            YavsInterface.check_version("prefix")
 
     def test_from_args_without_executable(self):
         args = SimpleNamespace(gui=False, viewer_fmt=None, viewer_args="", viewer=None)
         with (
-            mock.patch.object(RSIMInterface, "find_prefix", return_value=None),
-            self.assertRaisesRegex(FileNotFoundError, "RSIM executable not found"),
+            mock.patch.object(YavsInterface, "find_prefix", return_value=None),
+            self.assertRaisesRegex(FileNotFoundError, "YAVS executable not found"),
         ):
-            RSIMInterface.from_args(args, self.output_path)
+            YavsInterface.from_args(args, self.output_path)

@@ -15,7 +15,7 @@ from .incisive import IncisiveInterface
 from .modelsim import ModelSimInterface
 from .nvc import NVCInterface
 from .rivierapro import RivieraProInterface
-from .rsim import RSIMInterface
+from .yavs import YavsInterface
 from . import BooleanOption, ListOfStringOption, VHDLAssertLevelOption, StringOption
 
 
@@ -36,7 +36,7 @@ class SimulatorFactory(object):
             GHDLInterface,
             IncisiveInterface,
             NVCInterface,
-            RSIMInterface,
+            YavsInterface,
         ]
 
     def _extract_compile_options(self):

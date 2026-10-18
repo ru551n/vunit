@@ -7,11 +7,11 @@
 library vunit_lib;
 context vunit_lib.vunit_context;
 
-entity tb_rsim is
+entity tb_yavs is
   generic (runner_cfg : string);
 end entity;
 
-architecture tb of tb_rsim is
+architecture tb of tb_yavs is
 begin
   main : process
   begin

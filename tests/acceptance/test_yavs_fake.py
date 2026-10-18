@@ -5,7 +5,7 @@
 # Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
 
 """
-End to end test of the rsim interface against a fake rsim implementing the CLI contract
+End to end test of the yavs interface against a fake yavs implementing the CLI contract
 """
 
 import json
@@ -16,24 +16,24 @@ from pathlib import Path
 from subprocess import Popen, call
 from tests.common import check_report, create_tempdir
 
-ROOT = Path(__file__).parent / "rsim"
+ROOT = Path(__file__).parent / "yavs"
 
 
-@unittest.skipIf(sys.platform == "win32", "The fake rsim is a Python script without an .exe wrapper")
-class TestRsimFake(unittest.TestCase):
+@unittest.skipIf(sys.platform == "win32", "The fake yavs is a Python script without an .exe wrapper")
+class TestYavsFake(unittest.TestCase):
     """
-    Run a real run.py with VUNIT_SIMULATOR=rsim against the fake rsim
+    Run a real run.py with VUNIT_SIMULATOR=yavs against the fake yavs
     """
 
     def _run(self, tempdir, *args, fail="", delay="0"):
-        log = tempdir / "rsim.log"
+        log = tempdir / "yavs.log"
         env = dict(
             os.environ,
-            VUNIT_SIMULATOR="rsim",
-            VUNIT_RSIM_PATH=str(ROOT / "fake_bin"),
-            FAKE_RSIM_LOG=str(log),
-            FAKE_RSIM_FAIL=fail,
-            FAKE_RSIM_ANALYZE_DELAY=delay,
+            VUNIT_SIMULATOR="yavs",
+            VUNIT_YAVS_PATH=str(ROOT / "fake_bin"),
+            FAKE_YAVS_LOG=str(log),
+            FAKE_YAVS_FAIL=fail,
+            FAKE_YAVS_ANALYZE_DELAY=delay,
         )
         output_path = tempdir / "out with space"
         exit_code = call(
@@ -46,17 +46,17 @@ class TestRsimFake(unittest.TestCase):
 
     def test_pass(self):
         with create_tempdir() as tempdir:
-            exit_code, calls = self._run(tempdir, "lib.tb_rsim.test_pass", "lib.tb_rsim.test with, comma: and colon")
+            exit_code, calls = self._run(tempdir, "lib.tb_yavs.test_pass", "lib.tb_yavs.test with, comma: and colon")
             self.assertEqual(exit_code, 0)
             check_report(
                 str(tempdir / "x.xml"),
-                [("passed", "lib.tb_rsim.test_pass"), ("passed", "lib.tb_rsim.test with, comma: and colon")],
+                [("passed", "lib.tb_yavs.test_pass"), ("passed", "lib.tb_yavs.test with, comma: and colon")],
             )
 
-        self.assertTrue(any(cmd[0] == "analyze" and cmd[-1].endswith("tb_rsim.vhd") for cmd in calls))
+        self.assertTrue(any(cmd[0] == "analyze" and cmd[-1].endswith("tb_yavs.vhd") for cmd in calls))
         runs = [cmd for cmd in calls if cmd[0] == "run"]
         self.assertEqual(len(runs), 2)
-        self.assertIn("tb_rsim.tb", runs[0])
+        self.assertIn("tb_yavs.tb", runs[0])
         self.assertIn("--exit-severity=error", runs[0])
 
     def test_fail(self):
@@ -66,15 +66,15 @@ class TestRsimFake(unittest.TestCase):
             check_report(
                 str(tempdir / "x.xml"),
                 [
-                    ("passed", "lib.tb_rsim.test_pass"),
-                    ("passed", "lib.tb_rsim.test with, comma: and colon"),
-                    ("failed", "lib.tb_rsim.test_fail"),
+                    ("passed", "lib.tb_yavs.test_pass"),
+                    ("passed", "lib.tb_yavs.test with, comma: and colon"),
+                    ("failed", "lib.tb_yavs.test_fail"),
                 ],
             )
 
     def test_elaborate_only(self):
         with create_tempdir() as tempdir:
-            exit_code, calls = self._run(tempdir, "--elaborate", "lib.tb_rsim.test_pass")
+            exit_code, calls = self._run(tempdir, "--elaborate", "lib.tb_yavs.test_pass")
             self.assertEqual(exit_code, 0)
         self.assertTrue(any(cmd[0] == "elab" for cmd in calls))
         self.assertFalse(any(cmd[0] == "run" for cmd in calls))
@@ -90,14 +90,14 @@ class TestRsimFake(unittest.TestCase):
             check_report(
                 str(tempdir / "x.xml"),
                 [
-                    ("passed", "lib.tb_rsim.test_pass"),
-                    ("passed", "lib.tb_rsim.test with, comma: and colon"),
-                    ("passed", "lib.tb_rsim.test_fail"),
+                    ("passed", "lib.tb_yavs.test_pass"),
+                    ("passed", "lib.tb_yavs.test with, comma: and colon"),
+                    ("passed", "lib.tb_yavs.test_fail"),
                 ],
             )
             analyzes = [cmd for cmd in calls if cmd[0] == "analyze"]
             work = next(arg for cmd in analyzes for arg in cmd if arg.startswith("--work=vunit_lib:")).split(":", 1)[1]
-            manifest = json.loads((Path(work) / "rsim-lib.json").read_text(encoding="utf-8"))
+            manifest = json.loads((Path(work) / "yavs-lib.json").read_text(encoding="utf-8"))
         waits = [cmd[1] for cmd in calls if cmd[0] == "lock-wait"]
         vunit_lib_files = [
             str(Path(arg).resolve())
@@ -128,10 +128,10 @@ class TestRsimFake(unittest.TestCase):
 
     def _analyze_concurrently(self, tempdir, no_lock):
         """Analyze 4 files into one library from 4 processes at the same time. Return the exit codes."""
-        env = dict(os.environ, FAKE_RSIM_ANALYZE_DELAY="0.3")
-        env.pop("FAKE_RSIM_LOG", None)
+        env = dict(os.environ, FAKE_YAVS_ANALYZE_DELAY="0.3")
+        env.pop("FAKE_YAVS_LOG", None)
         if no_lock:
-            env["FAKE_RSIM_NO_LOCK"] = "1"
+            env["FAKE_YAVS_NO_LOCK"] = "1"
         library = tempdir / "lib"
         processes = []
         for idx in range(4):
@@ -139,7 +139,7 @@ class TestRsimFake(unittest.TestCase):
             source.write_text("", encoding="utf-8")
             processes.append(
                 Popen(  # pylint: disable=consider-using-with
-                    [sys.executable, str(ROOT / "fake_bin" / "rsim"), "analyze", f"--work=lib:{library}", str(source)],
+                    [sys.executable, str(ROOT / "fake_bin" / "yavs"), "analyze", f"--work=lib:{library}", str(source)],
                     env=env,
                 )
             )
@@ -149,7 +149,7 @@ class TestRsimFake(unittest.TestCase):
         with create_tempdir() as tempdir:
             exit_codes, library = self._analyze_concurrently(tempdir, no_lock=False)
             self.assertEqual(exit_codes, [0, 0, 0, 0])
-            manifest = json.loads((library / "rsim-lib.json").read_text(encoding="utf-8"))
+            manifest = json.loads((library / "yavs-lib.json").read_text(encoding="utf-8"))
             self.assertEqual(sorted(manifest), sorted(str(tempdir.resolve() / f"file{idx}.vhd") for idx in range(4)))
 
     def test_concurrent_analyzes_interleave_without_the_lock(self):

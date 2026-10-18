@@ -119,14 +119,14 @@ previous results and recent code changes to achieve two main goals:
 
 With ``--parallel-compile``, as many files as ``-p`` gives are also compiled in parallel. A file is compiled once the
 files it depends on are compiled. Most simulators do not lock a library while they update it, so a file is not compiled
-while another file is compiled into its library, or into a library it reads. NVC and rsim lock their libraries and
+while another file is compiled into its library, or into a library it reads. NVC and yavs lock their libraries and
 compile any files at the same time. Without ``--parallel-compile``, files are compiled one at a time.
 
 With ``--batch-compile``, the VHDL files of a library that are ready to be compiled at the same time, and have the same
 compile options, are compiled in one call to the compiler, rather than one call per file. This makes a clean compile
 several times faster, since most of the time of compiling a file goes into starting the compiler and updating the
 library. A batch that fails is compiled again one file at a time, to find the file that fails. ``--batch-compile`` is
-supported by GHDL, NVC, Riviera-PRO and rsim, and can be combined with ``--parallel-compile``. NVC, Riviera-PRO and rsim
+supported by GHDL, NVC, Riviera-PRO and yavs, and can be combined with ``--parallel-compile``. NVC, Riviera-PRO and yavs
 read the file names of a batch from a file. GHDL gets them in the command, so a batch ends before its command gets longer than
 32000 characters, below the limit of a command line on Windows.
 
@@ -207,7 +207,7 @@ VUnit automatically detects which simulators are available on the
 ``PATH`` environment variable and by default selects the first one
 found. For people who have multiple simulators installed the
 ``VUNIT_SIMULATOR`` environment variable can be set to one of
-``activehdl``, ``rivierapro``, ``ghdl``, ``nvc``, ``rsim``, or ``modelsim`` to
+``activehdl``, ``rivierapro``, ``ghdl``, ``nvc``, ``yavs``, or ``modelsim`` to
 specify which simulator to use. ``modelsim`` is used for both ModelSim
 and Questa as VUnit handles these simulators identically.
 

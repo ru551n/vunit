@@ -9,5 +9,5 @@ from vunit import VUnit
 
 VU = VUnit.from_argv()
 VU.add_vhdl_builtins()
-VU.add_library("lib").add_source_files(Path(__file__).parent / "tb_rsim.vhd")
+VU.add_library("lib").add_source_files(Path(__file__).parent / "tb_yavs.vhd")
 VU.main()

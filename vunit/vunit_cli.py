@@ -149,7 +149,7 @@ def _create_argument_parser(description=None, for_documentation=False):
         default=False,
         help=(
             "Compile the VHDL files of a library that are ready to be compiled at the same time, "
-            "and have the same compile options, in one call. Supported by GHDL, NVC, Riviera-PRO and rsim"
+            "and have the same compile options, in one call. Supported by GHDL, NVC, Riviera-PRO and yavs"
         ),
     )
 

@@ -35,12 +35,12 @@ The following compilation options are known.
    Extra global arguments to pass to ``nvc`` before the ``-a`` command.
    Must be a list of strings.
 
-``rsim.a_flags``
-   Extra arguments passed to ``rsim analyze``, after ``rsim.global_flags``.
+``yavs.a_flags``
+   Extra arguments passed to ``yavs analyze``, after ``yavs.global_flags``.
    Must be a list of strings.
 
-``rsim.global_flags``
-   Extra arguments passed to every ``rsim analyze``, ``rsim elab`` and ``rsim run`` command.
+``yavs.global_flags``
+   Extra arguments passed to every ``yavs analyze``, ``yavs elab`` and ``yavs run`` command.
    Must be a list of strings.
 
 ``rivierapro.vcom_flags``
@@ -267,25 +267,25 @@ The following simulation options are known.
    around to sourcing multiple user TCL-files:
    ``source <path/to/script.tcl>``
 
-``rsim.elab_flags``
-   Extra elaboration flags passed to ``rsim run`` and ``rsim elab``.
+``yavs.elab_flags``
+   Extra elaboration flags passed to ``yavs run`` and ``yavs elab``.
    Must be a list of strings.
 
-``rsim.global_flags``
-   Extra arguments passed to ``rsim run`` and ``rsim elab``.
+``yavs.global_flags``
+   Extra arguments passed to ``yavs run`` and ``yavs elab``.
    Must be a list of strings.
 
-``rsim.sim_flags``
-   Extra simulation flags passed to ``rsim run``. ``--exit-severity`` is set from
-   ``vhdl_assert_stop_level`` and overrides any value given here. rsim evaluates
+``yavs.sim_flags``
+   Extra simulation flags passed to ``yavs run``. ``--exit-severity`` is set from
+   ``vhdl_assert_stop_level`` and overrides any value given here. yavs evaluates
    processes on one thread unless, for example, ``["--threads=4"]`` is given here.
    Must be a list of strings.
 
-``rsim.viewer.gui``
+``yavs.viewer.gui``
    Name of waveform viewer to use. The command line argument ``--viewer`` will have
    precedence if provided. If neither is provided, ``surfer`` or ``gtkwave`` will be
-   used, in that order. rsim writes FST waveforms only.
+   used, in that order. yavs writes FST waveforms only.
 
-``rsim.viewer_script.gui``
+``yavs.viewer_script.gui``
    A user defined file passed to the waveform viewer with ``--script`` after the
    waveform has been loaded. Must be a string.
