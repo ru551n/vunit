@@ -237,7 +237,7 @@ class YavsInterface(SimulatorInterface, ViewerMixin):
         Simulate with entity as top level using generics
         """
         libdir = self._project.get_library(config.library_name).directory
-        # No --std: yavs elaborates with the standard recorded for the top level
+        # No --std: yavs elaborates with the newest standard recorded in the design closure
         cmd = self._get_command("elab" if elaborate_only else "run", config.library_name, libdir)
         script_path = Path(output_path) / self.name
         makedirs(script_path, exist_ok=True)
