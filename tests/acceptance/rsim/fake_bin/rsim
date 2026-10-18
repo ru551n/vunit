@@ -10,12 +10,50 @@ Fake rsim implementing the VUnit side of the rsim CLI contract, for testing with
 
 It appends each argv as a JSON line to FAKE_RSIM_LOG when set. 'run' emulates the VUnit VHDL runner: it decodes
 the runner_cfg generic and writes the vunit_results file. A test case named in FAKE_RSIM_FAIL fails.
+
+'analyze' takes several files, analyzed in order, and locks the work library like rsim (plan rule 14): an exclusive
+flock on <library>/_RSIM_LIB for the whole call. It holds the library for FAKE_RSIM_ANALYZE_DELAY seconds to provoke
+overlap, and fails with exit 3 when it finds another analyze inside the same library, which only happens without the
+lock (FAKE_RSIM_NO_LOCK=1). A wait for the lock is logged as ["lock-wait", library].
 """
 
+import fcntl
 import json
 import os
 import sys
+import time
 from pathlib import Path
+
+
+def log(entry):
+    """Append entry as a JSON line to FAKE_RSIM_LOG, if set."""
+    log_file = os.environ.get("FAKE_RSIM_LOG")
+    if log_file:
+        with open(log_file, "a", encoding="utf-8") as fptr:
+            fptr.write(json.dumps(entry) + "\n")
+
+
+def lock_library(path, exclusive):
+    """
+    Lock the library directory path with an flock on its _RSIM_LIB file, and return the open lock file. A read-only
+    library is locked shared through a read-only open, or not at all when the lock file cannot be opened.
+    """
+    lock_file = Path(path) / "_RSIM_LIB"
+    try:
+        lock_fd = os.open(lock_file, os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError:
+        try:
+            lock_fd = os.open(lock_file, os.O_RDONLY)
+            exclusive = False
+        except OSError:
+            return None
+    mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+    try:
+        fcntl.flock(lock_fd, mode | fcntl.LOCK_NB)
+    except BlockingIOError:
+        log(["lock-wait", str(path)])
+        fcntl.flock(lock_fd, mode)
+    return lock_fd
 
 
 def split_escaped(text, sep):
@@ -73,21 +111,57 @@ def library_dirs(opts):
 
 
 def analyze(args):
+    """Analyze files, in order, into the work library, stopping at the first file that fails."""
     opts, files = options(args)
-    _, path = library_dirs(opts)
+    path = library_dirs(opts)[1]
+    if not files:
+        print("error: no file to analyze")
+        return 2
+    os.makedirs(path, exist_ok=True)
+    lock = None if os.environ.get("FAKE_RSIM_NO_LOCK") else lock_library(path, exclusive=True)
+    busy = Path(path) / "_analyzing"
+    try:
+        # Without the lock, another analyze may be inside this library: what rsim must never allow
+        try:
+            os.close(os.open(busy, os.O_CREAT | os.O_EXCL))
+        except FileExistsError:
+            print(f"error: another analyze into {path} interleaved with this one")
+            return 3
+        try:
+            time.sleep(float(os.environ.get("FAKE_RSIM_ANALYZE_DELAY", "0")))
+            return analyze_files(files, Path(path))
+        finally:
+            os.remove(busy)
+    finally:
+        if lock is not None:
+            os.close(lock)
+
+
+def analyze_files(files, path):
+    """Record files in the manifest of the library path, written to a temporary file and renamed"""
+    manifest = path / "rsim-lib.json"
+    recorded = json.loads(manifest.read_text(encoding="utf-8")) if manifest.exists() else []
+    status = 0
     for file_name in files:
         if not Path(file_name).is_file():
             print(f"error: cannot open {file_name}")
-            return 1
-        os.makedirs(path, exist_ok=True)
-        with open(Path(path) / "rsim-lib.toml", "a", encoding="utf-8") as fptr:
-            fptr.write(f"[[file]]\npath = {json.dumps(str(Path(file_name).resolve()))}\n")
-    return 0
+            status = 1
+            break
+        recorded.append(str(Path(file_name).resolve()))
+        print(f"rsim: analyzed {file_name}")
+    temp = path / f"rsim-lib.json.{os.getpid()}"
+    temp.write_text(json.dumps(recorded), encoding="utf-8")
+    os.replace(temp, manifest)
+    return status
 
 
 def run(args, elaborate_only):
+    """Elaborate, and unless elaborate_only, emulate the VUnit runner of the top level."""
     opts, positional = options(args)
-    library_dirs(opts)
+    path = library_dirs(opts)[1]
+    lock = lock_library(path, exclusive=False) if Path(path).is_dir() else None
+    if lock is not None:
+        os.close(lock)  # Held only while reading the manifest
     if len(positional) != 1:
         print(f"error: expected one top level, got {positional!r}")
         return 2
@@ -129,11 +203,9 @@ def expand_response_files(argv):
 
 
 def main(argv):
+    """Run the rsim command argv and return its exit code."""
     argv = expand_response_files(argv)
-    log = os.environ.get("FAKE_RSIM_LOG")
-    if log:
-        with open(log, "a", encoding="utf-8") as fptr:
-            fptr.write(json.dumps(argv) + "\n")
+    log(argv)
 
     if argv == ["--version"]:
         print("rsim 0.0.0-fake (VUnit test double)")

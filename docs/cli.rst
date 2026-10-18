@@ -119,15 +119,15 @@ previous results and recent code changes to achieve two main goals:
 
 With ``--parallel-compile``, as many files as ``-p`` gives are also compiled in parallel. A file is compiled once the
 files it depends on are compiled. Most simulators do not lock a library while they update it, so a file is not compiled
-while another file is compiled into its library, or into a library it reads. NVC locks its libraries and compiles any
-files at the same time. Without ``--parallel-compile``, files are compiled one at a time.
+while another file is compiled into its library, or into a library it reads. NVC and rsim lock their libraries and
+compile any files at the same time. Without ``--parallel-compile``, files are compiled one at a time.
 
 With ``--batch-compile``, the VHDL files of a library that are ready to be compiled at the same time, and have the same
 compile options, are compiled in one call to the compiler, rather than one call per file. This makes a clean compile
 several times faster, since most of the time of compiling a file goes into starting the compiler and updating the
 library. A batch that fails is compiled again one file at a time, to find the file that fails. ``--batch-compile`` is
-supported by GHDL, NVC and Riviera-PRO, and can be combined with ``--parallel-compile``. NVC and Riviera-PRO read the
-file names of a batch from a file. GHDL gets them in the command, so a batch ends before its command gets longer than
+supported by GHDL, NVC, Riviera-PRO and rsim, and can be combined with ``--parallel-compile``. NVC, Riviera-PRO and rsim
+read the file names of a batch from a file. GHDL gets them in the command, so a batch ends before its command gets longer than
 32000 characters, below the limit of a command line on Windows.
 
 Opening a Test Case in Simulator GUI

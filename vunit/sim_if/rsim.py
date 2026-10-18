@@ -37,6 +37,12 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
     executable = environ.get("RSIM", "rsim")
     supports_gui_flag = True
     supports_colors_in_gui = True
+    # rsim locks each library while it analyzes into it, see the CLI contract
+    supports_concurrent_compiles_into_library = True
+    # rsim analyze takes several files, analyzed in order, and reads them from a response file
+    supports_batch_compile = True
+    # One file name per line, taken verbatim
+    batch_file_list_arguments = ("@{}",)
 
     compile_options = [
         ListOfStringOption("rsim.global_flags"),
@@ -144,6 +150,16 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
     def supports_vhdl_package_generics(cls):
         """
         Returns True when this simulator supports VHDL package generics
+        """
+        return True
+
+    @classmethod
+    def supports_vhdl_reflection(cls):
+        """
+        Returns True when this simulator supports VHDL-2019 reflection (std.reflection)
+
+        This is a target, not yet a claim: std.reflection is planned for rsim's 2019 mode, and until it
+        lands record_dict_pkg (vunit/vhdl/record_dict) fails to analyze on rsim.
         """
         return True
 

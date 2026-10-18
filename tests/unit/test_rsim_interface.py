@@ -10,6 +10,7 @@ Test the rsim interface
 
 import os
 import subprocess
+import threading
 import unittest
 from pathlib import Path
 from shutil import rmtree
@@ -98,6 +99,62 @@ class TestRSIMInterface(unittest.TestCase):
         self.assertTrue(RSIMInterface.supports_vhdl_call_paths())
         self.assertTrue(RSIMInterface.supports_vhpi())
         self.assertFalse(RSIMInterface.supports_coverage())
+        # rsim locks its libraries (CLI contract section 3)
+        self.assertTrue(RSIMInterface.supports_concurrent_compiles_into_library)
+        self.assertTrue(RSIMInterface.supports_batch_compile)
+        # A target: record_dict_pkg fails on rsim until std.reflection lands
+        self.assertTrue(RSIMInterface.supports_vhdl_reflection())
+
+    @mock.patch("vunit.sim_if.check_output", autospec=True)
+    def test_compile_project_in_a_batch_with_a_file_list(self, check_output):
+        project = self._project("2008", "2008", "2019")
+        file_lists = []
+
+        def check_output_side_effect(command, env=None):  # pylint: disable=unused-argument
+            if command[-1].startswith("@"):
+                file_lists.append(Path(command[-1][1:]).read_text(encoding="utf-8"))
+            return ""
+
+        check_output.side_effect = check_output_side_effect
+        self.simif.compile_project(project, batch=True)
+
+        # The files of a standard go in one call, the 2019 file in its own call with its own standard
+        commands = {call[0][0][2]: call[0][0] for call in check_output.call_args_list}
+        self.assertEqual(sorted(commands), ["--std=2008", "--std=2019"])
+        for std, command in commands.items():
+            self.assertEqual(
+                command[:-1],
+                [
+                    str(Path("prefix") / "rsim"),
+                    "analyze",
+                    std,
+                    "--work=lib:lib_path",
+                    "--map=lib:lib_path",
+                    f"--map=other:{Path('libs') / 'other path'}",
+                    "--color=always",
+                ],
+            )
+        self.assertTrue(commands["--std=2008"][-1].startswith("@"))
+        # One file name per line
+        self.assertEqual(len(file_lists), 1)
+        self.assertTrue(file_lists[0].endswith("\n"))
+        self.assertEqual(sorted(file_lists[0].splitlines()), ["file0.vhd", "file1.vhd"])
+        self.assertEqual(commands["--std=2019"][-1], "file2.vhd")
+        self.assertEqual(list(Path(self.output_path).glob("batch_*.txt")), [])
+
+    @mock.patch("vunit.sim_if.check_output", autospec=True)
+    def test_compile_project_into_a_library_concurrently(self, check_output):
+        barrier = threading.Barrier(2, timeout=5)
+        concurrent = []
+
+        def check_output_side_effect(command, env=None):  # pylint: disable=unused-argument
+            barrier.wait()  # Raises unless both files of lib are analyzed at the same time
+            concurrent.append(command[-1])
+            return ""
+
+        check_output.side_effect = check_output_side_effect
+        self.simif.compile_project(self._project("2008", "2008"), num_threads=2)
+        self.assertEqual(sorted(concurrent), ["file0.vhd", "file1.vhd"])
 
     @mock.patch("vunit.sim_if.check_output", autospec=True, return_value="")
     def test_compile_project(self, check_output):
