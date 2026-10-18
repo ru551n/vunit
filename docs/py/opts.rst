@@ -277,7 +277,8 @@ The following simulation options are known.
 
 ``rsim.sim_flags``
    Extra simulation flags passed to ``rsim run``. ``--exit-severity`` is set from
-   ``vhdl_assert_stop_level`` and overrides any value given here.
+   ``vhdl_assert_stop_level`` and overrides any value given here. rsim evaluates
+   processes on one thread unless, for example, ``["--threads=4"]`` is given here.
    Must be a list of strings.
 
 ``rsim.viewer.gui``

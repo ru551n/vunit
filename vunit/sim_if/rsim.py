@@ -86,7 +86,6 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
 
         self._prefix = prefix
         self._project = None
-        self._vhdl_standard = None
 
     @classmethod
     def _get_version_output(cls, prefix):
@@ -158,21 +157,13 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         for library in project.get_libraries():
             makedirs(Path(library.directory).parent, exist_ok=True)
 
-        vhdl_standards = set(
-            source_file.get_vhdl_standard()
-            for source_file in project.get_source_files_in_order()
-            if source_file.is_vhdl
-        )
-
-        if not vhdl_standards:
-            self._vhdl_standard = VHDL.STD_2008
-        elif len(vhdl_standards) != 1:
-            raise RuntimeError(f"rsim cannot handle mixed VHDL standards, found {vhdl_standards!r}")
-        else:
-            self._vhdl_standard = list(vhdl_standards)[0]
-
-        if self._vhdl_standard not in (VHDL.STD_2008, VHDL.STD_2019):
-            raise RuntimeError(f"rsim supports VHDL-2008 and VHDL-2019 only, found VHDL-{self._vhdl_standard}")
+        # rsim records the standard of each file, so 2008 and 2019 files can be mixed
+        for source_file in project.get_source_files_in_order():
+            if source_file.is_vhdl and source_file.get_vhdl_standard() not in (VHDL.STD_2008, VHDL.STD_2019):
+                raise RuntimeError(
+                    f"rsim supports VHDL-2008 and VHDL-2019 only, found VHDL-{source_file.get_vhdl_standard()}"
+                    f" for {source_file.name}"
+                )
 
     def compile_source_file_command(self, source_file):
         """
@@ -184,14 +175,13 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         LOGGER.error("Unknown file type: %s", source_file.file_type)
         raise CompileError
 
-    def _get_command(self, subcommand, std, worklib, workpath):
+    def _get_command(self, subcommand, worklib, workpath):
         """
         Get basic rsim command with library mapping
         """
         cmd = [
             str(Path(self._prefix) / self.executable),
             subcommand,
-            f"--std={std}",
             f"--work={worklib}:{workpath!s}",
         ]
 
@@ -207,9 +197,8 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         """
         Returns the command to compile a VHDL file
         """
-        cmd = self._get_command(
-            "analyze", source_file.get_vhdl_standard(), source_file.library.name, source_file.library.directory
-        )
+        cmd = self._get_command("analyze", source_file.library.name, source_file.library.directory)
+        cmd.insert(2, f"--std={source_file.get_vhdl_standard()}")
         cmd += source_file.compile_options.get("rsim.global_flags", [])
         cmd += source_file.compile_options.get("rsim.a_flags", [])
         cmd += [source_file.name]
@@ -232,7 +221,10 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
         Simulate with entity as top level using generics
         """
         libdir = self._project.get_library(config.library_name).directory
-        cmd = self._get_command("elab" if elaborate_only else "run", self._vhdl_standard, config.library_name, libdir)
+        # No --std: rsim elaborates with the standard recorded for the top level
+        cmd = self._get_command("elab" if elaborate_only else "run", config.library_name, libdir)
+        script_path = Path(output_path) / self.name
+        makedirs(script_path, exist_ok=True)
 
         if not elaborate_only and config.sim_options.get("disable_ieee_warnings", False):
             cmd += ["--ieee-warnings=off"]
@@ -249,8 +241,6 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
             cmd += [f"--exit-severity={config.vhdl_assert_stop_level}"]
 
             if self._gui:
-                script_path = Path(output_path) / self.name
-                makedirs(script_path, exist_ok=True)
                 wave_file = script_path / f"{config.entity_name}.fst"
                 if wave_file.exists():
                     remove(wave_file)
@@ -266,9 +256,12 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
 
         print(" ".join([f"'{word}'" if " " in word else word for word in cmd]))
 
+        # Everything after the subcommand goes through a response file
+        response_file = write_response_file(script_path / "args.rsp", cmd[2:])
+
         status = True
         try:
-            proc = Process(cmd, env=hooks.get_run_env(self))
+            proc = Process(cmd[:2] + [f"@{response_file}"], env=hooks.get_run_env(self))
             proc.consume_output()
         except Process.NonZeroExitCode:
             status = False
@@ -283,6 +276,22 @@ class RSIMInterface(SimulatorInterface, ViewerMixin):
             subprocess.call(cmd)
 
         return status
+
+
+def write_response_file(file_name, args):
+    """
+    Write args to an rsim response file, one argument per line taken verbatim, and return its name.
+
+    A response file keeps long generics such as runner_cfg clear of the Windows command line length limit
+    and of its quoting rules.
+    """
+    for arg in args:
+        if "\n" in arg or "\r" in arg:
+            raise ValueError(f"rsim arguments cannot contain line breaks: {arg!r}")
+
+    with open(file_name, "w", encoding="utf-8", newline="\n") as fptr:
+        fptr.write("".join(arg + "\n" for arg in args))
+    return file_name
 
 
 @total_ordering

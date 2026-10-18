@@ -15,7 +15,7 @@ from pathlib import Path
 from shutil import rmtree
 from types import SimpleNamespace
 from unittest import mock
-from vunit.sim_if.rsim import RSIMInterface, RSIMVersion
+from vunit.sim_if.rsim import RSIMInterface, RSIMVersion, write_response_file
 from vunit.sim_if.factory import SIMULATOR_FACTORY
 from vunit.project import Project
 from vunit.ostools import Process, renew_path, write_file
@@ -137,11 +137,15 @@ class TestRSIMInterface(unittest.TestCase):
         with self.assertRaises(CompileError):
             self.simif.compile_project(self._project("2008"))
 
-    def test_rejects_unsupported_and_mixed_standards(self):
-        with self.assertRaisesRegex(RuntimeError, "VHDL-2008 and VHDL-2019 only, found VHDL-2002"):
-            self.simif.setup_library_mapping(self._project("2002"))
-        with self.assertRaisesRegex(RuntimeError, "mixed VHDL standards"):
-            self.simif.setup_library_mapping(self._project("2008", "2019"))
+    def test_rejects_unsupported_standards(self):
+        with self.assertRaisesRegex(RuntimeError, "VHDL-2008 and VHDL-2019 only, found VHDL-2002 for file1.vhd"):
+            self.simif.setup_library_mapping(self._project("2008", "2002"))
+
+    @mock.patch("vunit.sim_if.check_output", autospec=True, return_value="")
+    def test_mixed_standards_are_analyzed_with_their_own_standard(self, check_output):
+        self.simif.compile_project(self._project("2008", "2019"))
+        stds = {call[0][0][-1]: call[0][0][2] for call in check_output.call_args_list}
+        self.assertEqual(stds, {"file0.vhd": "--std=2008", "file1.vhd": "--std=2019"})
 
     def _simulate(self, config, elaborate_only=False, gui=False, returncode=0):
         if gui:
@@ -156,7 +160,14 @@ class TestRSIMInterface(unittest.TestCase):
             if returncode:
                 process.return_value.consume_output.side_effect = Process.NonZeroExitCode
             status = self.simif.simulate(self.output_path, "lib.tb", config, elaborate_only)
-        return status, process.call_args[0][0], call
+
+        # The arguments after the subcommand are passed in a response file
+        cmd = process.call_args[0][0]
+        response_file = Path(self.output_path) / "rsim" / "args.rsp"
+        self.assertEqual(cmd, [str(Path("prefix") / "rsim"), "elab" if elaborate_only else "run", f"@{response_file}"])
+        args = response_file.read_bytes().decode("utf-8").split("\n")
+        self.assertEqual(args.pop(), "")
+        return status, cmd[:2] + args, call
 
     def test_simulate(self):
         runner_cfg = encode_dict({"enabled_test_cases": "a, b,,c", "output path": "C:/out path/"})
@@ -176,7 +187,6 @@ class TestRSIMInterface(unittest.TestCase):
             [
                 str(Path("prefix") / "rsim"),
                 "run",
-                "--std=2008",
                 "--work=lib:lib_path",
                 "--map=lib:lib_path",
                 f"--map=other:{Path('libs') / 'other path'}",
@@ -219,20 +229,21 @@ class TestRSIMInterface(unittest.TestCase):
         self.assertLess(cmd.index(f"--wave={wave_file}"), cmd.index("tb.arch"))
         call.assert_called_once_with(["surfer", str(wave_file), "--script", str(Path("init.tcl").resolve())])
 
-    def test_generics_survive_windows_quoting(self):
-        # rsim splits its command line with the MSVC rules, the inverse of list2cmdline
-        runner_cfg = encode_dict({"enabled_test_cases": 'te"st, x', "output path": "C:\\out path\\"})
-        arg = f"-grunner_cfg={runner_cfg}"
-        line = subprocess.list2cmdline(["rsim", "run", "tb.arch", arg])
-        if os.name == "nt":
-            import ctypes  # pylint: disable=import-outside-toplevel
+    def test_response_file_keeps_arguments_verbatim(self):
+        args = [
+            "-grunner_cfg=" + encode_dict({"enabled_test_cases": 'te"st, x', "output path": "C:\\out path\\"}),
+            "@not_a_response_file",
+            "",
+            "  spaces  ",
+            "-gtext=\u00e5\u00e4\u00f6",
+        ]
+        file_name = write_response_file(Path(self.output_path) / "args.rsp", args)
+        self.assertEqual(Path(file_name).read_bytes().decode("utf-8"), "".join(arg + "\n" for arg in args))
 
-            argc = ctypes.c_int()
-            argv = ctypes.windll.shell32.CommandLineToArgvW(line, ctypes.byref(argc))
-            self.assertEqual(argv[argc.value - 1], arg)
-        else:
-            self.assertIn('\\"', line)
-            self.assertTrue(line.endswith('"'))
+    def test_response_file_rejects_line_breaks(self):
+        for arg in ["-gx=a\nb", "-gx=a\r"]:
+            with self.assertRaisesRegex(ValueError, "cannot contain line breaks"):
+                write_response_file(Path(self.output_path) / "args.rsp", [arg])
 
     def test_check_version(self):
         with mock.patch.object(RSIMInterface, "_get_version_output", return_value="rsim 0.1.0\n"):
