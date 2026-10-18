@@ -43,8 +43,12 @@ VHDL only
 
 *  `NVC`_: Works with versions >= 1.9.
 
+*  rsim: Experimental. Never selected automatically when another simulator is
+   found, set ``VUNIT_SIMULATOR=rsim`` to use it. Supports VHDL-2008 and
+   VHDL-2019 only.
+
 .. HINT::
-  GHDL and NVC support using `GTKWave`_ to view waveforms.
+  GHDL, NVC and rsim support using `GTKWave`_ or Surfer to view waveforms.
 
 .. _Aldec Riviera-PRO: https://www.aldec.com/en/products/functional_verification/riviera-pro
 .. _Aldec Active-HDL: https://www.aldec.com/en/products/fpga_simulation/active-hdl

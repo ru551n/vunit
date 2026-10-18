@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# Copyright (c) 2014-2026, Lars Asplund lars.anders.asplund@gmail.com
+
+"""
+Fake rsim implementing the VUnit side of the rsim CLI contract, for testing without the real simulator.
+
+It appends each argv as a JSON line to FAKE_RSIM_LOG when set. 'run' emulates the VUnit VHDL runner: it decodes
+the runner_cfg generic and writes the vunit_results file. A test case named in FAKE_RSIM_FAIL fails.
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def split_escaped(text, sep):
+    """Split text at sep, where a doubled sep is a literal sep (VUnit dictionary encoding)."""
+    parts, current, idx = [], "", 0
+    while idx < len(text):
+        if text[idx] == sep and text[idx + 1 : idx + 2] == sep:
+            current += sep
+            idx += 2
+        elif text[idx] == sep:
+            parts.append(current)
+            current = ""
+            idx += 1
+        else:
+            current += text[idx]
+            idx += 1
+    return parts + [current]
+
+
+def decode_runner_cfg(value):
+    """Decode the runner_cfg dictionary."""
+    result = {}
+    for item in split_escaped(value, ","):
+        key, val = split_escaped(item, ":")
+        result[key.strip()] = val.strip()
+    return result
+
+
+def options(args):
+    """Split args into {name: [values]} for --name=value options and a list of positionals."""
+    opts, positional = {}, []
+    for arg in args:
+        if arg.startswith("--") and "=" in arg:
+            name, value = arg[2:].split("=", 1)
+            opts.setdefault(name, []).append(value)
+        elif arg.startswith("-g") and "=" in arg:
+            name, value = arg[2:].split("=", 1)
+            opts.setdefault("generic", []).append((name, value))
+        elif not arg.startswith("-"):
+            positional.append(arg)
+    return opts, positional
+
+
+def library_dirs(opts):
+    """Return the work library (name, path) checked against the contract."""
+    for mapping in opts.get("map", []) + opts.get("work", []):
+        name, path = mapping.split(":", 1)
+        if not name or not path:
+            sys.exit(f"rsim: bad library mapping {mapping!r}")
+    if len(opts.get("work", [])) != 1:
+        sys.exit("rsim: exactly one --work=NAME:PATH required")
+    if opts.get("std", ["2008"])[-1] not in ("2008", "2019"):
+        sys.exit(2)
+    return opts["work"][0].split(":", 1)
+
+
+def analyze(args):
+    opts, files = options(args)
+    _, path = library_dirs(opts)
+    for file_name in files:
+        if not Path(file_name).is_file():
+            print(f"error: cannot open {file_name}")
+            return 1
+        os.makedirs(path, exist_ok=True)
+        with open(Path(path) / "rsim-lib.toml", "a", encoding="utf-8") as fptr:
+            fptr.write(f"[[file]]\npath = {json.dumps(str(Path(file_name).resolve()))}\n")
+    return 0
+
+
+def run(args, elaborate_only):
+    opts, positional = options(args)
+    library_dirs(opts)
+    if len(positional) != 1:
+        print(f"error: expected one top level, got {positional!r}")
+        return 2
+    if elaborate_only:
+        return 0
+
+    generics = dict(opts.get("generic", []))
+    if "runner_cfg" not in generics:
+        return 0
+    cfg = decode_runner_cfg(generics["runner_cfg"])
+    tests = split_escaped(cfg["enabled_test_cases"], ",") if cfg["enabled_test_cases"] else []
+    failing = os.environ.get("FAKE_RSIM_FAIL", "")
+    with open(Path(cfg["output path"]) / "vunit_results", "w", encoding="utf-8") as fptr:
+        for test in tests:
+            fptr.write(f"test_start:{test}\n")
+            fptr.flush()
+            print(f"0 ps - fake rsim - INFO - running {test}")
+            if test == failing:
+                print(f"0 ps - fake rsim - ERROR - {test} failed")
+                return 1
+        fptr.write("test_suite_done\n")
+    return 0
+
+
+def main(argv):
+    log = os.environ.get("FAKE_RSIM_LOG")
+    if log:
+        with open(log, "a", encoding="utf-8") as fptr:
+            fptr.write(json.dumps(argv) + "\n")
+
+    if argv == ["--version"]:
+        print("rsim 0.0.0-fake (VUnit test double)")
+        return 0
+    if argv and argv[0] == "analyze":
+        return analyze(argv[1:])
+    if argv and argv[0] in ("run", "elab"):
+        return run(argv[1:], argv[0] == "elab")
+    print(f"rsim: unsupported command {argv!r}")
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
