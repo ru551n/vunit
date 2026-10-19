@@ -265,6 +265,8 @@ class YavsInterface(SimulatorInterface):
             if self._debug_port is not None:
                 # yavs prints that it waits for a debugger, and holds the run until one attaches
                 cmd += [f"--dap={self._debug_port}"]
+                # yavs flushes the waveform at every stop, so a viewer next to the debugger can reload it
+                cmd += [f"--wave={Path(output_path) / 'wave.fst'}"]
 
         if config.vhdl_configuration_name is not None:
             cmd += [config.vhdl_configuration_name]

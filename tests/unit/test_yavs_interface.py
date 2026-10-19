@@ -298,6 +298,7 @@ class TestYavsInterface(unittest.TestCase):
         self.simif = YavsInterface(prefix="prefix", output_path=self.output_path, debug_port=4711)
         _, cmd, _ = self._simulate(make_config())
         self.assertIn("--dap=4711", cmd)
+        self.assertIn(f"--wave={Path(self.output_path) / 'wave.fst'}", cmd)
         self.assertLess(cmd.index("--dap=4711"), cmd.index("tb.arch"))
         _, cmd, _ = self._simulate(make_config(), elaborate_only=True)
         self.assertNotIn("--dap=4711", cmd)
