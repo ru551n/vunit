@@ -1059,6 +1059,12 @@ other preprocessors. Lowest value first. The order between preprocessors with th
         if self._args.changed:
             test_list = self._get_test_list_depending_on_change(test_list)
 
+        try:
+            simulator_if.check_selected_tests(test_list.num_tests, self._args)
+        except ValueError as exc:
+            LOGGER.error("%s", exc)
+            sys.exit(1)
+
         self._compile(simulator_if)
         print()
 

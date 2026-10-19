@@ -24,6 +24,8 @@ from . import hooks
 
 LOGGER = logging.getLogger(__name__)
 
+DEFAULT_DEBUG_PORT = 4711
+
 
 class YavsInterface(SimulatorInterface):
     """
@@ -53,6 +55,22 @@ class YavsInterface(SimulatorInterface):
         ListOfStringOption("yavs.sim_flags"),
     ]
 
+    @staticmethod
+    def add_arguments(parser):
+        """
+        Add command line arguments
+        """
+        group = parser.add_argument_group("yavs", description="yavs specific flags")
+        group.add_argument(
+            "--debug",
+            action="store_true",
+            default=False,
+            help=(
+                "Run the one selected test under yavs --dap and wait for a debugger to attach, "
+                f"on port {DEFAULT_DEBUG_PORT} or the one in the environment variable YAVS_DAP_PORT"
+            ),
+        )
+
     @classmethod
     def from_args(cls, args, output_path, **kwargs):
         """
@@ -66,6 +84,7 @@ class YavsInterface(SimulatorInterface):
             output_path=output_path,
             prefix=prefix,
             gui=args.gui,
+            debug_port=debug_port(args),
         )
 
     @classmethod
@@ -75,8 +94,9 @@ class YavsInterface(SimulatorInterface):
         """
         return cls.find_toolchain([cls.executable])
 
-    def __init__(self, output_path, prefix, *, gui=False):
+    def __init__(self, output_path, prefix, *, gui=False, debug_port=None):
         SimulatorInterface.__init__(self, output_path, gui)
+        self._debug_port = debug_port
         self._prefix = prefix
         self._project = None
 
@@ -111,6 +131,19 @@ class YavsInterface(SimulatorInterface):
             raise RuntimeError(f"yavs {version} is too old for VUnit, {YAVS_MIN_VERSION} or later is required")
 
         return version
+
+    def check_selected_tests(self, num_tests, args):
+        """
+        Only one run can own the debugger port, and it cannot share the run with yavs-gui
+        """
+        if self._debug_port is None:
+            return
+        if self._gui:
+            raise ValueError("--debug and --gui cannot be used together")
+        if num_tests != 1:
+            raise ValueError(f"--debug runs exactly one test but {num_tests} are selected")
+        if args.num_threads != 1:
+            raise ValueError("--debug cannot be combined with -p/--num-threads other than 1")
 
     @staticmethod
     def has_valid_exit_code():
@@ -229,6 +262,9 @@ class YavsInterface(SimulatorInterface):
             cmd += hooks.get_flags(self, "run_flags")
             # Last one wins in yavs, so this overrides any --exit-severity in yavs.sim_flags
             cmd += [f"--exit-severity={config.vhdl_assert_stop_level}"]
+            if self._debug_port is not None:
+                # yavs prints that it waits for a debugger, and holds the run until one attaches
+                cmd += [f"--dap={self._debug_port}"]
 
         if config.vhdl_configuration_name is not None:
             cmd += [config.vhdl_configuration_name]
@@ -253,6 +289,21 @@ class YavsInterface(SimulatorInterface):
             status = False
 
         return status
+
+
+def debug_port(args):
+    """
+    Return the debugger port for --debug, or None. --debug also prints the test output as it comes,
+    since the line saying that yavs waits for a debugger is part of it.
+    """
+    if not args.debug:
+        return None
+    args.verbose = True
+    args.quiet = False
+    text = environ.get("YAVS_DAP_PORT", str(DEFAULT_DEBUG_PORT))
+    if not text.isdigit() or not 0 < int(text) < 65536:
+        raise RuntimeError(f"YAVS_DAP_PORT must be a port number, got {text!r}")
+    return int(text)
 
 
 def write_response_file(file_name, args):

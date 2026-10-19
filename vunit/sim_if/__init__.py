@@ -115,6 +115,13 @@ class SimulatorInterface(object):  # pylint: disable=too-many-public-methods
         Add command line arguments
         """
 
+    def check_selected_tests(self, num_tests, args):
+        """
+        Raise ValueError when the selected tests cannot run with the command line arguments
+        """
+        if getattr(args, "debug", False):
+            raise ValueError(f"--debug is not supported by {self.name}")
+
     @staticmethod
     def supports_vhdl_contexts():
         """

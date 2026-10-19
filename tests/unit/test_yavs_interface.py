@@ -16,7 +16,7 @@ from pathlib import Path
 from shutil import rmtree
 from types import SimpleNamespace
 from unittest import mock
-from vunit.sim_if.yavs import YavsInterface, YavsVersion, write_response_file
+from vunit.sim_if.yavs import YavsInterface, YavsVersion, debug_port, write_response_file
 from vunit.sim_if.factory import SIMULATOR_FACTORY
 from vunit.project import Project
 from vunit.ostools import Process, renew_path, write_file
@@ -293,6 +293,36 @@ class TestYavsInterface(unittest.TestCase):
     def test_gui_elaborate_only_has_no_gui_flag(self):
         _, cmd, _ = self._simulate(make_config(), elaborate_only=True, gui=True)
         self.assertEqual(cmd[1], "elab")
+
+    def test_debug_waits_for_a_debugger_in_the_run_only(self):
+        self.simif = YavsInterface(prefix="prefix", output_path=self.output_path, debug_port=4711)
+        _, cmd, _ = self._simulate(make_config())
+        self.assertIn("--dap=4711", cmd)
+        self.assertLess(cmd.index("--dap=4711"), cmd.index("tb.arch"))
+        _, cmd, _ = self._simulate(make_config(), elaborate_only=True)
+        self.assertNotIn("--dap=4711", cmd)
+
+    def test_debug_needs_exactly_one_test_and_one_thread(self):
+        args = SimpleNamespace(num_threads=1)
+        self.simif = YavsInterface(prefix="prefix", output_path=self.output_path, debug_port=4711)
+        self.simif.check_selected_tests(1, args)
+        with self.assertRaisesRegex(ValueError, "exactly one test but 2"):
+            self.simif.check_selected_tests(2, args)
+        with self.assertRaisesRegex(ValueError, "-p"):
+            self.simif.check_selected_tests(1, SimpleNamespace(num_threads=2))
+        gui = YavsInterface(prefix="prefix", output_path=self.output_path, gui=True, debug_port=4711)
+        with self.assertRaisesRegex(ValueError, "--gui"):
+            gui.check_selected_tests(1, args)
+
+    def test_debug_port_from_environment(self):
+        args = SimpleNamespace(debug=True, verbose=False, quiet=True)
+        with mock.patch.dict(os.environ, {"YAVS_DAP_PORT": "5000"}):
+            self.assertEqual(debug_port(args), 5000)
+        self.assertTrue(args.verbose)
+        self.assertFalse(args.quiet)
+        with mock.patch.dict(os.environ, {"YAVS_DAP_PORT": "x"}), self.assertRaisesRegex(RuntimeError, "YAVS_DAP_PORT"):
+            debug_port(args)
+        self.assertIsNone(debug_port(SimpleNamespace(debug=False)))
 
     def test_response_file_keeps_arguments_verbatim(self):
         args = [
