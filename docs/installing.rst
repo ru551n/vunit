@@ -48,7 +48,9 @@ VHDL only
    VHDL-2019 only.
 
 .. HINT::
-  GHDL, NVC and yavs support using `GTKWave`_ or Surfer to view waveforms.
+  GHDL and NVC support using `GTKWave`_ or Surfer to view waveforms.
+  With yavs, ``--gui`` opens the run in the ``yavs-gui`` debugger, which must be
+  installed next to ``yavs`` or on the ``PATH``.
 
 .. _Aldec Riviera-PRO: https://www.aldec.com/en/products/functional_verification/riviera-pro
 .. _Aldec Active-HDL: https://www.aldec.com/en/products/fpga_simulation/active-hdl

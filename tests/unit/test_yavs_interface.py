@@ -206,12 +206,11 @@ class TestYavsInterface(unittest.TestCase):
 
     def _simulate(self, config, elaborate_only=False, gui=False, returncode=0):
         if gui:
-            self.simif = YavsInterface(prefix="prefix", output_path=self.output_path, gui=True, viewer="surfer")
+            self.simif = YavsInterface(prefix="prefix", output_path=self.output_path, gui=True)
         self.simif.setup_library_mapping(self._project("2008"))
         with (
             mock.patch("vunit.sim_if.yavs.Process", autospec=True) as process,
             mock.patch("vunit.sim_if.yavs.subprocess.call", autospec=True) as call,
-            mock.patch.object(YavsInterface, "find_executable", return_value=["surfer"]),
         ):
             process.NonZeroExitCode = Process.NonZeroExitCode
             if returncode:
@@ -221,7 +220,9 @@ class TestYavsInterface(unittest.TestCase):
         # The arguments after the subcommand are passed in a response file
         cmd = process.call_args[0][0]
         response_file = Path(self.output_path) / "yavs" / "args.rsp"
-        self.assertEqual(cmd, [str(Path("prefix") / "yavs"), "elab" if elaborate_only else "run", f"@{response_file}"])
+        sub = "elab" if elaborate_only else "run"
+        gui_flag = ["--gui"] if gui and not elaborate_only else []
+        self.assertEqual(cmd, [str(Path("prefix") / "yavs"), sub] + gui_flag + [f"@{response_file}"])
         args = response_file.read_bytes().decode("utf-8").split("\n")
         self.assertEqual(args.pop(), "")
         return status, cmd[:2] + args, call
@@ -278,13 +279,20 @@ class TestYavsInterface(unittest.TestCase):
         status, _, _ = self._simulate(make_config(), returncode=1)
         self.assertFalse(status)
 
-    def test_gui_writes_fst_and_opens_viewer(self):
-        config = make_config(sim_options={"yavs.viewer_script.gui": "init.tcl"})
-        _, cmd, call = self._simulate(config, gui=True)
-        wave_file = Path(self.output_path) / "yavs" / "tb.fst"
-        self.assertIn(f"--wave={wave_file}", cmd)
-        self.assertLess(cmd.index(f"--wave={wave_file}"), cmd.index("tb.arch"))
-        call.assert_called_once_with(["surfer", str(wave_file), "--script", str(Path("init.tcl").resolve())])
+    def test_gui_runs_yavs_gui_with_the_same_arguments(self):
+        config = make_config(
+            generics={"runner_cfg": "x", "width": 8},
+            sim_options={"yavs.sim_flags": ["--stop-time=1ms"], "yavs.global_flags": ["--threads=2"]},
+        )
+        _, plain, _ = self._simulate(config)
+        _, gui, call = self._simulate(config, gui=True)
+        self.assertEqual(gui, [arg for arg in plain if arg != "--color=always"])
+        self.assertFalse(any("--wave" in arg for arg in gui))
+        call.assert_not_called()
+
+    def test_gui_elaborate_only_has_no_gui_flag(self):
+        _, cmd, _ = self._simulate(make_config(), elaborate_only=True, gui=True)
+        self.assertEqual(cmd[1], "elab")
 
     def test_response_file_keeps_arguments_verbatim(self):
         args = [

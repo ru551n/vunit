@@ -9,26 +9,23 @@ Interface for the yavs simulator
 """
 
 from pathlib import Path
-from os import environ, makedirs, remove
+from os import environ, makedirs
 import logging
 import subprocess
-import shlex
 import re
 import warnings
 from functools import total_ordering
-from sys import stdout  # To avoid output catched in non-verbose mode
 from ..exceptions import CompileError
 from ..ostools import Process
 from . import SimulatorInterface, ListOfStringOption, StringOption
 from . import check_executable
-from ._viewermixin import ViewerMixin
 from ..vhdl_standard import VHDL
 from . import hooks
 
 LOGGER = logging.getLogger(__name__)
 
 
-class YavsInterface(SimulatorInterface, ViewerMixin):
+class YavsInterface(SimulatorInterface):
     """
     Interface for the yavs simulator
     """
@@ -36,7 +33,8 @@ class YavsInterface(SimulatorInterface, ViewerMixin):
     name = "yavs"
     executable = environ.get("YAVS", "yavs")
     supports_gui_flag = True
-    supports_colors_in_gui = True
+    # yavs-gui drives the run over a debug protocol, so no terminal colour codes
+    supports_colors_in_gui = False
     # yavs locks each library while it analyzes into it, see the CLI contract
     supports_concurrent_compiles_into_library = True
     # yavs analyze takes several files, analyzed in order, and reads them from a response file
@@ -53,8 +51,6 @@ class YavsInterface(SimulatorInterface, ViewerMixin):
         ListOfStringOption("yavs.global_flags"),
         ListOfStringOption("yavs.elab_flags"),
         ListOfStringOption("yavs.sim_flags"),
-        StringOption("yavs.viewer_script.gui"),
-        StringOption("yavs.viewer.gui"),
     ]
 
     @classmethod
@@ -70,9 +66,6 @@ class YavsInterface(SimulatorInterface, ViewerMixin):
             output_path=output_path,
             prefix=prefix,
             gui=args.gui,
-            viewer_fmt=args.viewer_fmt,
-            viewer_args=args.viewer_args,
-            viewer=args.viewer,
         )
 
     @classmethod
@@ -82,14 +75,8 @@ class YavsInterface(SimulatorInterface, ViewerMixin):
         """
         return cls.find_toolchain([cls.executable])
 
-    def __init__(  # pylint: disable=too-many-arguments
-        self, output_path, prefix, *, gui=False, viewer_fmt=None, viewer_args="", viewer=None
-    ):
+    def __init__(self, output_path, prefix, *, gui=False):
         SimulatorInterface.__init__(self, output_path, gui)
-        if viewer_fmt not in (None, "fst"):
-            LOGGER.warning("yavs only writes fst, ignoring --viewer-fmt=%s", viewer_fmt)
-        ViewerMixin.__init__(self, gui=gui, viewer=viewer, viewer_fmt="fst", viewer_args=viewer_args)
-
         self._prefix = prefix
         self._project = None
 
@@ -220,18 +207,6 @@ class YavsInterface(SimulatorInterface, ViewerMixin):
         cmd += [source_file.name]
         return cmd
 
-    def _get_viewer(self, config):
-        """
-        Prefer Surfer, which the yavs GUI will embed, when no viewer is given.
-        """
-        if (
-            self._viewer is None
-            and config.sim_options.get(self.name + ".viewer.gui") is None
-            and self._surfer_available
-        ):
-            return "surfer"
-        return ViewerMixin._get_viewer(self, config)
-
     def simulate(self, output_path, test_suite_name, config, elaborate_only):
         """
         Simulate with entity as top level using generics
@@ -249,18 +224,11 @@ class YavsInterface(SimulatorInterface, ViewerMixin):
         cmd += config.sim_options.get("yavs.elab_flags", [])
         cmd += hooks.get_flags(self, "elab_flags")
 
-        wave_file = None
         if not elaborate_only:
             cmd += config.sim_options.get("yavs.sim_flags", [])
             cmd += hooks.get_flags(self, "run_flags")
             # Last one wins in yavs, so this overrides any --exit-severity in yavs.sim_flags
             cmd += [f"--exit-severity={config.vhdl_assert_stop_level}"]
-
-            if self._gui:
-                wave_file = script_path / f"{config.entity_name}.fst"
-                if wave_file.exists():
-                    remove(wave_file)
-                cmd += [f"--wave={wave_file}"]
 
         if config.vhdl_configuration_name is not None:
             cmd += [config.vhdl_configuration_name]
@@ -272,24 +240,17 @@ class YavsInterface(SimulatorInterface, ViewerMixin):
 
         print(" ".join([f"'{word}'" if " " in word else word for word in cmd]))
 
-        # Everything after the subcommand goes through a response file
+        # Everything after the subcommand goes through a response file. --gui stays on the command line so that
+        # yavs opens the run in yavs-gui with exactly the arguments of the non-GUI run.
         response_file = write_response_file(script_path / "args.rsp", cmd[2:])
+        gui_flag = ["--gui"] if self._gui and not elaborate_only else []
 
         status = True
         try:
-            proc = Process(cmd[:2] + [f"@{response_file}"], env=hooks.get_run_env(self))
+            proc = Process(cmd[:2] + gui_flag + [f"@{response_file}"], env=hooks.get_run_env(self))
             proc.consume_output()
         except Process.NonZeroExitCode:
             status = False
-
-        if wave_file:
-            cmd = [self._get_viewer(config)] + shlex.split(self._viewer_args) + [str(wave_file)]
-            init_file = config.sim_options.get(self.name + ".viewer_script.gui", None)
-            if init_file is not None:
-                cmd += ["--script", str(Path(init_file).resolve())]
-
-            stdout.write(f'{" ".join(cmd)}\n')
-            subprocess.call(cmd)
 
         return status
 

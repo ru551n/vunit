@@ -280,12 +280,3 @@ The following simulation options are known.
    ``vhdl_assert_stop_level`` and overrides any value given here. yavs evaluates
    processes on one thread unless, for example, ``["--threads=4"]`` is given here.
    Must be a list of strings.
-
-``yavs.viewer.gui``
-   Name of waveform viewer to use. The command line argument ``--viewer`` will have
-   precedence if provided. If neither is provided, ``surfer`` or ``gtkwave`` will be
-   used, in that order. yavs writes FST waveforms only.
-
-``yavs.viewer_script.gui``
-   A user defined file passed to the waveform viewer with ``--script`` after the
-   waveform has been loaded. Must be a string.
