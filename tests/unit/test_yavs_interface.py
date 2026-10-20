@@ -365,6 +365,16 @@ class TestYavsInterface(unittest.TestCase):
         ):
             YavsInterface.check_version("prefix")
 
+    def test_from_args_compiles_in_batches(self):
+        args = SimpleNamespace(gui=False, debug=False, batch_compile=False)
+        with (
+            mock.patch.object(YavsInterface, "find_prefix", return_value="prefix"),
+            mock.patch("vunit.sim_if.yavs.check_executable"),
+            mock.patch.object(YavsInterface, "check_version"),
+        ):
+            YavsInterface.from_args(args, self.output_path)
+        self.assertTrue(args.batch_compile)
+
     def test_from_args_without_executable(self):
         args = SimpleNamespace(gui=False, viewer_fmt=None, viewer_args="", viewer=None)
         with (

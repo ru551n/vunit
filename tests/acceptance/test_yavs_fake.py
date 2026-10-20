@@ -112,13 +112,12 @@ class TestYavsFake(unittest.TestCase):
         return analyzes, waits
 
     def test_parallel_compile(self):
-        analyzes, waits = self._compile("--parallel-compile", "-p", "8")
-        self.assertTrue(all(len([arg for arg in cmd[1:] if not arg.startswith("-")]) == 1 for cmd in analyzes))
-        # Analyzes into vunit_lib overlapped, and the lock kept them apart
-        self.assertTrue(any(wait.endswith("vunit_lib") for wait in waits))
+        # Files are compiled in batches without any option: yavs takes several files per call
+        analyzes, _ = self._compile("--parallel-compile", "-p", "8")
+        self.assertTrue(any(len([arg for arg in cmd[1:] if not arg.startswith("-")]) > 1 for cmd in analyzes))
 
     def test_batch_compile(self):
-        analyzes, waits = self._compile("--batch-compile")
+        analyzes, waits = self._compile()
         self.assertTrue(any(len([arg for arg in cmd[1:] if not arg.startswith("-")]) > 1 for cmd in analyzes))
         self.assertEqual(waits, [])
 

@@ -80,6 +80,10 @@ class YavsInterface(SimulatorInterface):
         check_executable("YAVS", prefix, cls.executable)
         cls.check_version(prefix)
 
+        # One yavs analyze call per library batch instead of one per file: each call opens and locks the
+        # library, reads its manifest and starts a process
+        args.batch_compile = True
+
         return cls(
             output_path=output_path,
             prefix=prefix,
