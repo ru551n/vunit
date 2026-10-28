@@ -58,6 +58,9 @@ class ProgramStatus(object):
 
 PROGRAM_STATUS = ProgramStatus()
 
+# The vunit.jobserver.Jobserver of the running test run, if any; processes started meanwhile join it
+JOBSERVER = None
+
 
 class InterruptableQueue(object):
     """
@@ -114,18 +117,30 @@ class Process(object):
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
             )
         else:
-            self._process = subprocess.Popen(  # pylint: disable=consider-using-with
-                args,
-                bufsize=0,
-                cwd=cwd,
-                env=env,
-                stdout=subprocess.PIPE,
-                stdin=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                # Create new process group on POSIX, setpgrp does not exist on Windows
-                preexec_fn=os.setpgrp,  # pylint: disable=no-member
-            )
+            jobserver = JOBSERVER
+            fds = jobserver.new_pipe() if jobserver is not None else ()
+            if fds:
+                env = jobserver.child_env(env, fds)
+            try:
+                self._process = subprocess.Popen(  # pylint: disable=consider-using-with
+                    args,
+                    bufsize=0,
+                    cwd=cwd,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stdin=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True,
+                    # Create new process group on POSIX, setpgrp does not exist on Windows
+                    preexec_fn=os.setpgrp,  # pylint: disable=no-member
+                    pass_fds=fds,
+                )
+            except BaseException:
+                for file_descriptor in fds:
+                    os.close(file_descriptor)
+                raise
+            if fds:
+                jobserver.add(fds, self._process)
 
         LOGGER.debug("Started process with pid=%i: '%s'", self._process.pid, (" ".join(args)))
 

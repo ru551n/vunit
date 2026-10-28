@@ -1296,6 +1296,7 @@ other preprocessors. Lowest value first. The order between preprocessors with th
             no_color=self._args.no_color,
             latest_dependency_updates=latest_dependency_updates,
             test_history=test_history,
+            jobserver=simulator_if.supports_jobserver,
         )
         runner.run(test_cases)
 

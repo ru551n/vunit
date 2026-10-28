@@ -62,6 +62,9 @@ class SimulatorInterface(object):  # pylint: disable=too-many-public-methods
     # True if simulator supports ANSI colors in GUI mode
     supports_colors_in_gui = False
 
+    # True if the simulator reads a GNU make jobserver from MAKEFLAGS, see docs/vunit_packages.rst
+    supports_jobserver = False
+
     # The path prefix the interface was built with, set by the interfaces having one
     _prefix: Optional[str] = None
 

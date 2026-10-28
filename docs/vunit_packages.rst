@@ -378,3 +378,56 @@ latest when :meth:`main() <vunit.ui.VUnit.main>` is called. Arguments added by a
 available to run scripts passing their own namespace to :meth:`from_args() <vunit.ui.VUnit.from_args>`.
 
 The simulator interfaces of VUnit remain built in.
+
+.. _package_jobserver:
+
+Sharing the CPU Budget with a Jobserver
+---------------------------------------
+
+A simulator that can use several threads per simulation can share the CPU budget of a parallel run (``-p N``)
+through the GNU make jobserver protocol. The simulator interface opts in with a class attribute, so the built-in
+simulators and every other interface are unaffected:
+
+.. code-block:: python
+
+   class FooInterface(SimulatorInterface):
+       supports_jobserver = True
+
+The budget is ``N`` CPU slots, counted the way ``make -j N`` counts them: one running test is free and every
+further running test takes one slot, so while ``k`` tests run, ``N - k`` slots are lent to the simulators as
+extra threads. For example, with ``-p 16`` and four tests left, each test can get three extra threads, and the
+run never uses more than 16. When only the last tests of a run are still going, the slots of the idle workers go
+to them. With ``-p 1`` there is no jobserver.
+
+Each simulator process VUnit starts during the run gets a private pipe, passed as
+``MAKEFLAGS="-jN --jobserver-auth=R,W"`` with the two file descriptors inherited by the process. The process
+follows the client side of the protocol:
+
+* It owns one implicit token and may run one thread without asking.
+* For every extra thread it reads one byte from ``R``. The read end is non-blocking: when the read fails with
+  ``EAGAIN`` no token is free, and the process continues with the threads it has. It never waits for a token.
+* It writes every byte it read back to ``W`` as soon as the extra thread is idle, and before it exits, also on
+  errors and interrupts.
+* It takes no more tokens than it can use. A limit such as a ``--threads`` option still applies.
+
+A broker thread in VUnit lends the free tokens into the pipes and takes back the tokens left unused in a pipe,
+about every 50 ms and at once when a simulator process starts. Tokens a process has read are never taken
+back. Lending is breadth first, since a second thread rarely doubles the speed of one simulation: every running
+simulation gets one extra token before any gets a second. Within a round the most recently started simulation
+comes first, since the older ones finish earlier and free their tokens anyway. ``vunit.jobserver.lend_order``
+decides the order.
+
+A test that starts while every token is in use runs at once. The broker then lends nothing until enough tokens
+are back, so the run exceeds ``N`` threads only until the busy simulations return the tokens they hold.
+
+When a simulator process exits, its pipe is closed. A process that exits without writing back every token it
+read, for example because a timeout killed it, has broken the protocol: VUnit logs a warning naming the process
+and puts the tokens back in the pool, since the process can no longer use them. At the end of the run VUnit warns
+if a simulator process that is still running holds tokens.
+
+Notes:
+
+* The jobserver needs POSIX pipes and file descriptor inheritance. On Windows, a simulator with
+  ``supports_jobserver = True`` runs without a jobserver, as if the attribute was ``False``.
+* VUnit does not join a jobserver it inherits, for example when ``make -j`` starts it. Its simulators get the
+  jobserver of VUnit instead, and ``-p`` sets the budget of the VUnit run on its own.

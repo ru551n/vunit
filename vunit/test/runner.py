@@ -18,8 +18,9 @@ import time
 import logging
 import string
 from datetime import datetime
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from .. import ostools
+from ..jobserver import Jobserver
 from ..hashing import hash_string
 from .report import PASSED, FAILED, SKIPPED
 
@@ -48,6 +49,7 @@ class TestRunner(object):  # pylint: disable=too-many-instance-attributes
         no_color=False,
         latest_dependency_updates=None,
         test_history=None,
+        jobserver=False,
     ):
         self._lock = threading.Lock()
         self._fail_fast = fail_fast
@@ -70,6 +72,12 @@ class TestRunner(object):  # pylint: disable=too-many-instance-attributes
         self._no_color = no_color
         self._latest_dependency_updates = {} if latest_dependency_updates is None else latest_dependency_updates
         self._test_history = {} if test_history is None else test_history
+        # Share the CPU budget with simulators that read MAKEFLAGS; pass_fds does not exist on Windows
+        self._jobserver = (
+            Jobserver(self._num_threads)
+            if jobserver and self._num_threads > 1 and not ostools.IS_WINDOWS_SYSTEM
+            else None
+        )
 
         ostools.PROGRAM_STATUS.reset()
 
@@ -110,6 +118,10 @@ class TestRunner(object):  # pylint: disable=too-many-instance-attributes
         # Disable continuous output in parallel mode
         write_stdout = self._is_verbose and self._num_threads == 1
 
+        if self._jobserver is not None:
+            self._jobserver.start()
+            ostools.JOBSERVER = self._jobserver
+
         try:
             sys.stdout = ThreadLocalOutput(self._local, self._stdout)
             sys.stderr = ThreadLocalOutput(self._local, self._stdout)
@@ -138,6 +150,10 @@ class TestRunner(object):  # pylint: disable=too-many-instance-attributes
             for thread in threads:
                 thread.join()
 
+            if self._jobserver is not None:
+                ostools.JOBSERVER = None
+                self._jobserver.close()
+
             sys.stdout = self._stdout
             sys.stderr = self._stderr
             LOGGER.debug("TestRunner: Leaving")
@@ -162,7 +178,8 @@ class TestRunner(object):  # pylint: disable=too-many-instance-attributes
                         print(f"({now}) Starting {test_name!s}")
                     print(f"Output file: {output_file_name!s}")
 
-                self._run_test_suite(test_suite, write_stdout, num_tests, output_path, output_file_name)
+                with self._jobserver.running_test() if self._jobserver is not None else nullcontext():
+                    self._run_test_suite(test_suite, write_stdout, num_tests, output_path, output_file_name)
 
             except StopIteration:
                 return
