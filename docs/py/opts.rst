@@ -33,6 +33,7 @@ The following compilation options are known.
 
 ``yavs.global_flags``
    Extra arguments passed to every ``yavs analyze``, ``yavs elab`` and ``yavs run`` command.
+   VUnit passes ``--std-cache=<output path>/yavs/std_cache`` first, so a ``--std-cache`` given here wins.
    Must be a list of strings.
 
 ``nvc.a_flags``

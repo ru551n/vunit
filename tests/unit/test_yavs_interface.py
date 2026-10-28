@@ -74,6 +74,7 @@ class TestYavsInterface(unittest.TestCase):
         self.cwd = os.getcwd()
         os.chdir(self.output_path)
         self.simif = YavsInterface(prefix="prefix", output_path=self.output_path)
+        self.std_cache_flag = f"--std-cache={Path(self.output_path).resolve() / 'std_cache'}"
 
     def tearDown(self):
         os.chdir(self.cwd)
@@ -116,6 +117,7 @@ class TestYavsInterface(unittest.TestCase):
                 "--work=lib:lib_path",
                 "--map=lib:lib_path",
                 f"--map=other:{Path('libs') / 'other path'}",
+                self.std_cache_flag,
                 "--color=always",
                 "file0.vhd",
             ],
@@ -197,6 +199,7 @@ class TestYavsInterface(unittest.TestCase):
                 "--work=lib:lib_path",
                 "--map=lib:lib_path",
                 f"--map=other:{Path('libs') / 'other path'}",
+                self.std_cache_flag,
                 "--color=always",
                 "--ieee-warnings=off",
                 "--threads=2",
@@ -215,6 +218,15 @@ class TestYavsInterface(unittest.TestCase):
         config = make_config(vhdl_configuration_name="cfg", vhdl_assert_stop_level="failure")
         _, cmd, _ = self._simulate(config)
         self.assertEqual(cmd[-2:], ["--exit-severity=failure", "cfg"])
+
+    def test_std_cache_on_run_and_elab_and_user_flag_wins(self):
+        config = make_config(sim_options={"yavs.elab_flags": ["--std-cache=off"]})
+        for elaborate_only in (False, True):
+            _, cmd, _ = self._simulate(config, elaborate_only=elaborate_only)
+            self.assertEqual(cmd[1], "elab" if elaborate_only else "run")
+            self.assertLess(cmd.index(self.std_cache_flag), cmd.index("--std-cache=off"))
+            self.assertEqual([arg for arg in cmd if arg.startswith("--std-cache=")][-1], "--std-cache=off")
+        self.assertFalse((Path(self.output_path) / "std_cache").exists())
 
     def test_elaborate_only(self):
         config = make_config(sim_options={"yavs.elab_flags": ["--relaxed"], "yavs.sim_flags": ["--stop-time=1ms"]})

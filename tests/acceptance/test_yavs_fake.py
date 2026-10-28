@@ -58,6 +58,13 @@ class TestYavsFake(unittest.TestCase):
         self.assertEqual(len(runs), 2)
         self.assertIn("tb_yavs.tb", runs[0])
         self.assertIn("--exit-severity=error", runs[0])
+        # Every analyze, elab and run keeps the shared std/ieee units inside the output directory
+        for cmd in calls:
+            if cmd[0] in ("analyze", "elab", "run"):
+                self.assertEqual(
+                    [arg for arg in cmd if arg.startswith("--std-cache=")],
+                    [f"--std-cache={tempdir / 'out with space' / 'yavs' / 'std_cache'}"],
+                )
 
     def test_fail(self):
         with create_tempdir() as tempdir:
