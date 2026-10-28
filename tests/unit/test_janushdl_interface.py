@@ -29,8 +29,8 @@ class TestJanusHDLInterface(unittest.TestCase):
         self.output_path = str(Path(__file__).parent / "janushdl_out")
         renew_path(self.output_path)
         self.project = Project()
-        self.project.add_library("lib_a", "lib_a_path")
-        self.project.add_library("lib_b", "lib_b_path")
+        self.project.add_library("lib_a", str(Path(self.output_path) / "lib_a"))
+        self.project.add_library("lib_b", str(Path(self.output_path) / "lib_b"))
         write_file("a.vhd", "package p is end package;")
         write_file("b.vhd", "library lib_a; use lib_a.p.all; entity e is end entity;")
         self.simif = JanusHDLInterface(output_path=self.output_path, prefix="prefix")
@@ -78,7 +78,7 @@ class TestJanusHDLInterface(unittest.TestCase):
     def test_compile_project_2019_and_1993(self, check_output):
         for standard, flag in [("2019", "19"), ("93", "93")]:
             project = Project()
-            project.add_library("lib_a", "lib_a_path")
+            project.add_library("lib_a", str(Path(self.output_path) / "lib_a"))
             project.add_source_file("a.vhd", "lib_a", file_type="vhdl", vhdl_standard=VHDL.standard(standard))
             self.simif.compile_project(project)
             command = check_output.call_args[0][0]
