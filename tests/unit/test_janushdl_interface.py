@@ -54,7 +54,7 @@ class TestJanusHDLInterface(unittest.TestCase):
         self._add("b.vhd", "lib_b", **{"janushdl.a_flags": ["--psl"]})
         self.simif.compile_project(self.project)
 
-        work = Path(self.output_path) / "janushdl"
+        work = Path(self.output_path)
         check_output.assert_called_once_with(
             [
                 str(Path("prefix") / "jhdl"),

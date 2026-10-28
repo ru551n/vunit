@@ -67,7 +67,7 @@ class JanusHDLInterface(SimulatorInterface):  # pylint: disable=abstract-method
         self._project = None
         self._vhdl_standard = None
         self._a_flags = []
-        self._work_path = Path(output_path) / self.name
+        self._work_path = Path(output_path)
         self._file_list = self._work_path / "files.f"
         self._cache = self._work_path / "analysis.jcache"
 
@@ -142,10 +142,7 @@ class JanusHDLInterface(SimulatorInterface):  # pylint: disable=abstract-method
         else:
             source_files = project.get_minimal_file_set_in_compile_order(target_files)
 
-        if not source_files:
-            printer.write("Re-compile not needed\n")
-            return
-
+        # Always run: jhdl reloads a fresh cache in milliseconds and alone knows whether it is stale
         command = self._analysis_command() + ["--analyze-only"]
         printer.write(f"Compiling {len(source_files)} changed files with JanusHDL\n")
         sys.stdout.flush()
